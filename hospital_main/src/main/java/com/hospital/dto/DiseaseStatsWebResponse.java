@@ -15,23 +15,23 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class DiseaseStatsWebResponse {
-    private String icdGroupName;
-    private String icdName;
-    private List<WeeklyData> weeklyData;
-    private Integer totalCount;
-    private RiskLevel riskLevel;
-    private Integer recentChange;
-    private Double recentChangeRate;
+    private String icdGroupName;      // 질병 그룹명
+    private String icdName;            // 질병명
+    private List<WeeklyData> weeklyData;  // 주간 데이터 목록
+    private Integer totalCount;        // 전체 환자 수
+    private RiskLevel riskLevel;       // 위험도 수준
+    private Integer recentChange;      // 최근 증감 수
+    private Double recentChangeRate;   // 최근 증감률
     
     
-    // 내부 클래스
+    // 주간 데이터 내부 클래스
     @Getter
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
     @Builder
     public static class WeeklyData {
-        private String period;
-        private Integer count;  
+        private String period;  // 기간 
+        private Integer count;  // 해당 주의 환자 수
     }
 }

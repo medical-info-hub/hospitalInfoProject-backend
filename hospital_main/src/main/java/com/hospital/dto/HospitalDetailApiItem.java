@@ -18,13 +18,9 @@ import lombok.AllArgsConstructor;
 @ToString
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class HospitalDetailApiItem {
-	
-    @JsonProperty("emyDayYn")
-    private String emyDayYn; // 주간 응급 진료 가능 여부
-    
-    @JsonProperty("emyNgtYn")
-    private String emyNgtYn; // 야간 응급 진료 가능 여부
-    
+
+    private String hospitalCode; // 병원 코드 (PK, API 응답에는 없고 외부에서 설정)
+
     @JsonProperty("parkQty")
     private String parkQty; // 주차 가능 대수
     
@@ -34,11 +30,6 @@ public class HospitalDetailApiItem {
     @JsonProperty("lunchWeek")
     private String lunchWeek; // 점심시간
     
-    @JsonProperty("rcvWeek")
-    private String rcvWeek; // 평일 접수 시간
-    
-    @JsonProperty("rcvSat")
-    private String rcvSat; // 토요일 접수 시간
     
     @JsonProperty("noTrmtHoli")
     private String noTrmtHoli;  // 공휴일 휴진 여부
@@ -66,10 +57,10 @@ public class HospitalDetailApiItem {
     private String trmtWedEnd; // 수요일 진료 종료 시간
     
     @JsonProperty("trmtThuStart")
-    private String trmtThuStart; // 목요일 진료 시작 시간
-    
+    private String trmtThurStart; // 목요일 진료 시작 시간
+
     @JsonProperty("trmtThuEnd")
-    private String trmtThuEnd; // 목요일 진료 종료 시간
+    private String trmtThurEnd; // 목요일 진료 종료 시간
     
     @JsonProperty("trmtFriStart")
     private String trmtFriStart; // 금요일 진료 시작 시간
