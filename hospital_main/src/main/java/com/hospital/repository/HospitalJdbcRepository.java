@@ -58,7 +58,7 @@ public class HospitalJdbcRepository {
             """;
 
         return jdbcTemplate.query(sql,
-            new HospitalRowMapper(),
+            new HospitalWebResponseRowMapper(),
             minLon, minLat, maxLon, minLat, maxLon, maxLat, minLon, maxLat, minLon, minLat
         );
     }
