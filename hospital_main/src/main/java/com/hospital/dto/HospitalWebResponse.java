@@ -50,8 +50,6 @@ public class HospitalWebResponse {
   
     private Map<String, Integer> professionalDoctors;
 
-    // 타임스탬프
-    private String timestamp;
 
 
 }
