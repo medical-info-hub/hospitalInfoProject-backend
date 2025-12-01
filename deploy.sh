@@ -45,7 +45,43 @@ docker-compose -f docker-compose.prod.yml down || true
 echo "📁 디렉토리 생성..."
 sudo mkdir -p /opt/hospital/data/mariadb
 sudo mkdir -p /opt/hospital/logs/backend
+# 모니터링 디렉토리 생성 (Prometheus/Grafana)
+sudo mkdir -p /opt/hospital/monitoring/prometheus/config
+sudo mkdir -p /opt/hospital/monitoring/grafana/data
+
+# 📝 prometheus.yml 파일 동적 생성
+echo "📝 prometheus.yml 설정 파일 생성 중..."
+cat <<EOF | sudo tee /opt/hospital/monitoring/prometheus/config/prometheus.yml > /dev/null
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'hospital-monitor'
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'hospital-backend'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      # Docker Compose 네트워크 내의 서비스명과 내부 포트 사용
+      - targets: ['hospital-backend:8888'] 
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+EOF
+
+# 권한 설정 (Prometheus 컨테이너가 읽을 수 있도록)
 sudo chown -R ec2-user:ec2-user /opt/hospital/
+sudo chmod 644 /opt/hospital/monitoring/prometheus/config/prometheus.yml
 
 echo "▶️ 백엔드 및 DB 컨테이너 시작..."
 docker-compose -f docker-compose.prod.yml up -d
@@ -73,4 +109,3 @@ echo "🔧 API 테스트:"
 echo "  curl http://${SERVER_IP}:${BACKEND_PORT}/actuator/health"
 echo ""
 echo "✨ 배포가 완료되었습니다!"
-
