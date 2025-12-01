@@ -96,8 +96,6 @@ public class HospitalWebService {
 		// 4. limit 적용
 		hospitals = applyLimit(hospitals, limit);
 
-		// 5. 타임스탬프 설정
-		addTimestamp(hospitals);
 
 		log.info("Total elapsed: {}ms", System.currentTimeMillis() - startTime);
 		return hospitals;
@@ -147,12 +145,6 @@ public class HospitalWebService {
 			return hospitals.subList(0, limit);
 		}
 		return hospitals;
-	}
-
-	// 타임스탬프 설정 (재사용 가능)
-	private void addTimestamp(List<HospitalWebResponse> hospitals) {
-		String timestamp = java.time.Instant.now().toString();
-		hospitals.forEach(hospital -> hospital.setTimestamp(timestamp));
 	}
 
 
