@@ -1,7 +1,6 @@
 package com.hospital.service;
 
 import com.hospital.async.HospitalDetailAsyncRunner;
-import com.hospital.repository.HospitalDetailApiRepository;
 import com.hospital.repository.HospitalMainApiRepository;
 
 import lombok.extern.slf4j.Slf4j;
@@ -18,16 +17,12 @@ public class HospitalDetailApiService {
 
 	private final HospitalMainApiRepository hospitalMainApiRepository;
 	private final HospitalDetailAsyncRunner hospitalDetailAsyncRunner;
-	private final HospitalDetailApiRepository hospitalDetailRepository;
-	
 
 	@Autowired
 	public HospitalDetailApiService(HospitalMainApiRepository hospitalMainApiRepository,
-			HospitalDetailAsyncRunner hospitalDetailAsyncRunner, HospitalDetailApiRepository hospitalDetailRepository) {
-		this.hospitalDetailRepository = hospitalDetailRepository;
+			HospitalDetailAsyncRunner hospitalDetailAsyncRunner) {
 		this.hospitalDetailAsyncRunner = hospitalDetailAsyncRunner;
 		this.hospitalMainApiRepository = hospitalMainApiRepository;
-		
 	}
 
 	 public int updateHospitalDetails() {

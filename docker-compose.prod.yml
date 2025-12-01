@@ -1,4 +1,4 @@
-version: '3.8'
+version: '3.9'
 services:
   # MariaDB 데이터베이스
   mariadb:
@@ -92,4 +92,5 @@ networks:
   hospital-network:
     name: hospital-network  # 네트워크 이름을 명시적으로 지정
     driver: bridge
+
 
