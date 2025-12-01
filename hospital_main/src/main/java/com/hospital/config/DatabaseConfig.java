@@ -2,6 +2,8 @@ package com.hospital.config;
 
 import javax.sql.DataSource;
 
+import io.micrometer.core.instrument.MeterRegistry; // [추가] 메트릭 레지스트리
+import org.springframework.beans.factory.annotation.Autowired; // [추가] 의존성 주입
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,7 +17,7 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
 /**
- * 데이터베이스 관련 설정 (커넥션 풀 적용)
+ * 데이터베이스 관련 설정 (커넥션 풀 적용 및 모니터링)
  * - HikariCP 커넥션 풀 설정
  * - JPA EntityManager 설정
  * - 트랜잭션 매니저 설정
@@ -24,6 +26,10 @@ import com.zaxxer.hikari.HikariDataSource;
 @Configuration
 public class DatabaseConfig {
     
+    // [추가] MetricsConfig에서 빈으로 등록된 MeterRegistry 주입
+    @Autowired
+    private MeterRegistry meterRegistry;
+
     @Bean
     public DataSource dataSource(@Value("${jdbc.driverClassName}") String driverClassName,
                                  @Value("${jdbc.url}") String url,
@@ -56,7 +62,9 @@ public class DatabaseConfig {
         config.addDataSourceProperty("cacheResultSetMetadata", "true");
         config.addDataSourceProperty("cacheServerConfiguration", "true");
         config.addDataSourceProperty("elideSetAutoCommits", "true");
-        config.addDataSourceProperty("maintainTimeStats", "false");
+        
+        // [수정] 메트릭 수집을 위해 시간 통계 유지가 필요하므로 false 설정을 제거하거나 주석 처리
+        // config.addDataSourceProperty("maintainTimeStats", "false"); 
         
         // MariaDB/MySQL 특화 설정
         config.addDataSourceProperty("useUnicode", "true");
@@ -66,17 +74,18 @@ public class DatabaseConfig {
         // 커넥션 풀 이름 설정
         config.setPoolName("HospitalDB-HikariCP");
         
+        // [추가] HikariCP 메트릭 레지스트리 등록 (이 코드가 있어야 Grafana에서 보임)
+        config.setMetricRegistry(meterRegistry);
+        
         HikariDataSource dataSource = new HikariDataSource(config);
         
-        System.out.println("✅ HikariCP 커넥션 풀 설정 완료:");
+        System.out.println("✅ HikariCP 커넥션 풀 설정 완료 (메트릭 활성화):");
         System.out.println("   - URL: " + url);
         System.out.println("   - 최대 커넥션: " + config.getMaximumPoolSize());
         System.out.println("   - 최소 커넥션: " + config.getMinimumIdle());
         System.out.println("   - 배치 최적화: 활성화");
         
         return dataSource;
-        
-        
     }
     
     @Bean
@@ -136,5 +145,4 @@ public class DatabaseConfig {
     public JdbcTemplate jdbcTemplate(DataSource dataSource) {
         return new JdbcTemplate(dataSource);
     }
-    
 }
