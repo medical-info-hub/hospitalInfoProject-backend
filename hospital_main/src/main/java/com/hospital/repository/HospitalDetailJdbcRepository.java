@@ -1,19 +1,16 @@
 package com.hospital.repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hospital.dto.HospitalDetailApiItem;
+import com.hospital.util.HospitalMapperUtils;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -25,35 +22,7 @@ public class HospitalDetailJdbcRepository {
     private JdbcTemplate jdbcTemplate;
 
     private static final int BATCH_SIZE = 100;
-
-    // RowMapper: ResultSet → HospitalDetailApiItem 변환
-    private static final RowMapper<HospitalDetailApiItem> ROW_MAPPER = new RowMapper<HospitalDetailApiItem>() {
-        @Override
-        public HospitalDetailApiItem mapRow(ResultSet rs, int rowNum) throws SQLException {
-            HospitalDetailApiItem item = new HospitalDetailApiItem();
-            item.setHospitalCode(rs.getString("hospital_code"));
-            item.setParkQty(rs.getString("parking_capacity"));
-            item.setParkXpnsYn(rs.getString("park_xpns_yn"));
-            item.setLunchWeek(rs.getString("weekday_lunch"));
-            item.setNoTrmtHoli(rs.getString("noTrmtHoli"));
-            item.setNoTrmtSun(rs.getString("noTrmtSun"));
-            item.setTrmtMonStart(rs.getString("mon_open"));
-            item.setTrmtMonEnd(rs.getString("mon_end"));
-            item.setTrmtTueStart(rs.getString("tues_open"));
-            item.setTrmtTueEnd(rs.getString("tues_end"));
-            item.setTrmtWedStart(rs.getString("wed_open"));
-            item.setTrmtWedEnd(rs.getString("wed_end"));
-            item.setTrmtThurStart(rs.getString("thurs_open"));
-            item.setTrmtThurEnd(rs.getString("thurs_end"));
-            item.setTrmtFriStart(rs.getString("fri_open"));
-            item.setTrmtFriEnd(rs.getString("fri_end"));
-            item.setTrmtSatStart(rs.getString("trmt_sat_start"));
-            item.setTrmtSatEnd(rs.getString("trmt_sat_end"));
-            item.setTrmtSunStart(rs.getString("trmt_sun_start"));
-            item.setTrmtSunEnd(rs.getString("trmt_sun_end"));
-            return item;
-        }
-    };
+    private static final HospitalDetailApiRowMapper ROW_MAPPER = new HospitalDetailApiRowMapper();
 
     /**
      * 1. 전체 병원 코드 조회 (중복 제거)
@@ -101,7 +70,7 @@ public class HospitalDetailJdbcRepository {
         List<Object[]> batchArgs = items.stream()
                 .map(item -> new Object[]{
                         item.getHospitalCode(),
-                        parseInteger(item.getParkQty()),
+                        HospitalMapperUtils.parseInteger(item.getParkQty()),
                         item.getParkXpnsYn(),
                         item.getLunchWeek(),
                         item.getNoTrmtHoli(),
@@ -147,7 +116,7 @@ public class HospitalDetailJdbcRepository {
 
         List<Object[]> batchArgs = items.stream()
                 .map(item -> new Object[]{
-                        parseInteger(item.getParkQty()),
+                        HospitalMapperUtils.parseInteger(item.getParkQty()),
                         item.getParkXpnsYn(),
                         item.getLunchWeek(),
                         item.getNoTrmtHoli(),
@@ -195,20 +164,5 @@ public class HospitalDetailJdbcRepository {
                         HospitalDetailApiItem::getHospitalCode,
                         item -> item
                 ));
-    }
-
-    /**
-     * Helper: String → Integer 변환
-     */
-    private Integer parseInteger(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return null;
-        }
-        try {
-            return Integer.valueOf(value.trim());
-        } catch (NumberFormatException e) {
-            log.warn("정수 변환 실패: {}", value);
-            return null;
-        }
     }
 }
