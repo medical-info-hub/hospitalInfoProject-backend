@@ -111,7 +111,9 @@ Jenkins (CI/CD)
 Maven 3.9 (Build Tool)
 ```
 
-### Libraries & Frameworks
+<details>
+<summary><b>📚 Libraries & Frameworks (상세)</b></summary>
+
 | Category | Technology | Version |
 |----------|-----------|---------|
 | ORM | Hibernate | 6.2.9 |
@@ -123,6 +125,8 @@ Maven 3.9 (Build Tool)
 | Monitoring | Micrometer Prometheus | 1.11.4 |
 | Logging | SLF4J + Logback | 2.0.13 |
 | Spatial | Hibernate Spatial | 6.2.9 |
+
+</details>
 
 ## 🏗 시스템 아키텍처
 
@@ -220,7 +224,7 @@ WebSocket 연결 → EmergencyLiveService → TaskScheduler (3분 주기)
 
 1. **저장소 클론**
 ```bash
-git clone [https://github.com/your-username/hospitalInfoProject-backend.git](https://github.com/medical-info-hub/hospitalInfoProject-backend.git)
+git clone https://github.com/your-username/hospitalInfoProject-backend.git(https://github.com/medical-info-hub/hospitalInfoProject-backend.git)
 cd hospitalInfoProject-backend
 ```
 
@@ -280,6 +284,9 @@ docker-compose up -d
 ```
 
 ## 📚 API 문서
+
+<details>
+<summary><b>🔍 API 엔드포인트 상세 보기</b></summary>
 
 ### 병원 정보 수집 API
 
@@ -369,6 +376,8 @@ GET /web/pharmaciesData?userLat=37.5&userLng=127.0&radius=3
 ```http
 GET /search/unifiedData?userLat=37.5&userLng=127.0&radius=5&type=all
 ```
+
+</details>
 
 ## 🗄 데이터베이스 구조
 
@@ -511,7 +520,8 @@ jvm_memory_used_bytes{area="heap"} 536870912
 
 ## 🐳 배포
 
-### Docker Compose
+<details>
+<summary><b>🐋 Docker Compose 설정 보기</b></summary>
 
 ```yaml
 version: '3.8'
@@ -551,6 +561,8 @@ services:
 volumes:
   mariadb_data:
 ```
+
+</details>
 
 ### Jenkins CI/CD
 
@@ -620,10 +632,10 @@ mvn jacoco:report
 
 ## 🙏 감사의 말
 
-- [공공데이터포털](https://www.data.go.kr/) - 의료 데이터 제공
-- [Spring Framework](https://spring.io/) - 강력한 백엔드 프레임워크
-- [MariaDB Foundation](https://mariadb.org/) - 안정적인 데이터베이스
-- [PostGIS](https://postgis.net/) - 공간 데이터 처리
+이 프로젝트가 가능하도록 도움을 준 기관과 기술에 감사드립니다:
 
----
+- 📊 [공공데이터포털](https://www.data.go.kr/) - 의료 데이터 제공
+- 🌱 [Spring Framework](https://spring.io/) - 안정적이고 강력한 백엔드 프레임워크
+- 🐬 [MariaDB Foundation](https://mariadb.org/) - 데이터베이스 지원
+- 🗺 [PostGIS](https://postgis.net/) - 공간 데이터 처리
 
