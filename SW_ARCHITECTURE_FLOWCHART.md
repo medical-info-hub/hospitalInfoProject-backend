@@ -547,9 +547,124 @@ graph TB
     style NodeExporter fill:#26a69a
 ```
 
-## 7. 성능 최적화 전략
+## 6. 데이터베이스 ERD
+
 
 ```mermaid
+erDiagram
+    HOSPITAL_MAIN ||--o| HOSPITAL_DETAIL : "1:1"
+    HOSPITAL_MAIN ||--o{ MEDICAL_SUBJECT : "1:N"
+    HOSPITAL_MAIN ||--o{ PRO_DOC : "1:N"
+
+    HOSPITAL_MAIN {
+        string hospital_code PK "병원 코드"
+        string hospital_name "병원명"
+        string hospital_address "주소"
+        string hospital_tel "전화번호"
+        string doctor_num "총 의사 수"
+        double coordinate_x "경도"
+        double coordinate_y "위도"
+        point location "PostGIS 위치"
+    }
+
+    HOSPITAL_DETAIL {
+        string hospital_code PK "병원 코드 (FK)"
+        int parking_capacity "주차 대수"
+        string park_xpns_yn "주차 유료 여부"
+        string weekday_lunch "점심시간"
+        string noTrmtHoli "공휴일 휴무"
+        string noTrmtSun "일요일 휴무"
+        string mon_open "월요일 시작"
+        string mon_end "월요일 종료"
+        string tues_open "화요일 시작"
+        string tues_end "화요일 종료"
+        string wed_open "수요일 시작"
+        string wed_end "수요일 종료"
+        string thurs_open "목요일 시작"
+        string thurs_end "목요일 종료"
+        string fri_open "금요일 시작"
+        string fri_end "금요일 종료"
+        string trmt_sat_start "토요일 시작"
+        string trmt_sat_end "토요일 종료"
+        string trmt_sun_start "일요일 시작"
+        string trmt_sun_end "일요일 종료"
+    }
+
+    MEDICAL_SUBJECT {
+        bigint id PK "자동 증가 ID"
+        string hospital_code FK "병원 코드"
+        string subjects "진료과목 목록 쉼표 구분"
+    }
+
+    PRO_DOC {
+        bigint id PK "자동 증가 ID"
+        string hospital_code FK "병원 코드"
+        string subject_name "진료과목명"
+        int pro_doc_count "전문의 수"
+    }
+
+    PHARMACY {
+        bigint id PK "자동 증가 ID"
+        string pharmacy_name "약국명"
+        string address "주소"
+        string phone "전화번호"
+        string fax "팩스 번호"
+        string etc "비고 휴게시간등"
+        string map_info "약도 위치설명"
+        string post_code1 "우편번호 앞"
+        string post_code2 "우편번호 뒤"
+        double latitude "위도"
+        double longitude "경도"
+        string ykiho UK "약국 고유식별자"
+        string mon_open "월요일 오픈"
+        string mon_close "월요일 마감"
+        string tue_open "화요일 오픈"
+        string tue_close "화요일 마감"
+        string wed_open "수요일 오픈"
+        string wed_close "수요일 마감"
+        string thu_open "목요일 오픈"
+        string thu_close "목요일 마감"
+        string fri_open "금요일 오픈"
+        string fri_close "금요일 마감"
+        string sat_open "토요일 오픈"
+        string sat_close "토요일 마감"
+        string sun_open "일요일 오픈"
+        string sun_close "일요일 마감"
+        string holiday_open "공휴일 오픈"
+        string holiday_close "공휴일 마감"
+    }
+
+    EMERGENCY_LOCATION {
+        string emergency_code PK "응급실 코드"
+        string coordinate_X "경도"
+        string coordinate_Y "위도"
+        string emergency_address "주소"
+    }
+
+    DISEASE_STATS {
+        bigint id PK "자동 증가 ID"
+        string period "기간"
+        string icd_group_name "질병 그룹명"
+        string icd_name "질병명"
+        string result_value "통계 결과값"
+    }
+
+    YOUTUBE_VIDEO {
+        string video_id PK "YouTube 비디오 ID"
+        string title "제목"
+        text description "설명"
+        string thumbnail_high_url "썸네일 URL"
+        string channel_id "채널 ID"
+        string channel_title "채널명"
+        datetime published_at "업로드 일시"
+        string main_category "주 카테고리"
+        string detail_category "상세 카테고리"
+    }
+```
+
+## 7. 성능 최적화 전략
+```mermaid
+%%{init: {'theme':'neutral'}}%%
 mindmap
   root((성능 최적화))
     데이터베이스
@@ -591,8 +706,6 @@ mindmap
       WebSocket
         실시간 통신
         양방향 연결
-      HTTP/2
-        멀티플렉싱
       압축
         GZIP
 ```
