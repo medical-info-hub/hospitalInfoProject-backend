@@ -36,7 +36,7 @@ Hospital Information Hub는 **정부 공공데이터 API**를 활용하여 전�
 ## ✨ 주요 기능
 
 ### 1. 의료기관 정보 관리
-- 전국 병원 기본 정보 수집 및 관리 (15,000+ 의료기관)
+- 전국 병원 기본 정보 수집 및 관리 (79000+ 의료기관)
 - 병원 상세 정보 (운영시간, 주차정보, 진료과목, 전문의 수)
 - **청크 기반 멀티스레드 처리**: 100개 단위로 병원 코드 묶어 병렬 수집
 - 위치 기반 검색 (PostGIS 공간 인덱스)
@@ -128,36 +128,61 @@ Maven 3.9 (Build Tool)
 
 ### 전체 구성도
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                          Client (Browser)                        │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │ HTTP/HTTPS, WebSocket
-                               ▼
-                    ┌──────────────────────┐
-                    │  Apache HTTP Server  │ (Reverse Proxy)
-                    └──────────┬───────────┘
-                               │ AJP
-                               ▼
-┌──────────────────────────────────────────────────────────────────┐
-│           Spring Framework 6.0.13 Application                    │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
-│  │ Controllers │→ │   Services   │→ │ Repositories (JPA/JDBC)│ │
-│  └─────────────┘  └──────────────┘  └───────────┬────────────┘ │
-│                                                   │               │
-│  ┌─────────────────────────────────────────────┐ │              │
-│  │ Async Runners (Thread Pool: 10-15 threads) │ │              │
-│  │  - Rate Limiter: 5 req/sec                 │ │              │
-│  └─────────────┬───────────────────────────────┘ │              │
-└────────────────┼─────────────────────────────────┼──────────────┘
-                 │                                  │
-                 │ HTTPS                            │ JDBC
-                 ▼                                  ▼
-     ┌───────────────────────┐          ┌──────────────────┐
-     │ 정부 공공데이터 API   │          │  MariaDB 10.11   │
-     │ YouTube API           │          │  + PostGIS       │
-     │ Gemini AI API         │          └──────────────────┘
-     └───────────────────────┘
+```mermaid
+graph TB
+    subgraph Client["Client"]
+        User[사용자]
+    end
+
+    subgraph Backend["Backend Application (Spring 6.0.13)"]
+        Controller[Spring MVC/REST Controller]
+        Service[Service Layer]
+        WebSocket[Spring WebSocket]
+        WebFlux[Spring WebFlux]
+        
+        Controller -->|HTTP 요청| Service
+        Service -->|실시간 병상 정보<br/>비동기 AI 호출| WebSocket
+        Service -->|비동기 통신| WebFlux
+    end
+    
+    subgraph Pipeline["Data Pipeline & Task"]
+        AsyncRunner[Async Runner<br/>공공 API 수집]
+        Scheduler[Task Scheduler<br/>응급실 3분 주기 갱신]
+    end
+    
+    subgraph External["Data & External Service"]
+        DB[(MariaDB 10.11<br/>+ PostGIS)]
+        GovAPI[정부 공공데이터 API]
+        GeminiAPI[Google Gemini AI API]
+        Monitor[Prometheus & Grafana<br/>모니터링]
+    end
+    
+    User -->|병원 검색, AI 문의| Controller
+    Controller -->|DB 조회/저장| DB
+    Controller -->|메트릭 기록| Monitor
+    
+    AsyncRunner -->|대용량 데이터 수집| GovAPI
+    AsyncRunner -->|저장| Service
+    
+    Scheduler -->|주기적 호출| GovAPI
+    Scheduler -->|갱신| Service
+    
+    WebFlux -->|비동기 통신| GeminiAPI
+    WebSocket -->|실시간 업데이트| User
+    
+    classDef clientStyle fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px
+    classDef backendStyle fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    classDef pipelineStyle fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    classDef dataStyle fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef wsStyle fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
+    classDef aiStyle fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
+    
+    class User clientStyle
+    class Controller,Service backendStyle
+    class AsyncRunner,Scheduler pipelineStyle
+    class DB,GovAPI dataStyle
+    class WebSocket wsStyle
+    class WebFlux,GeminiAPI aiStyle
 ```
 
 ### 데이터 흐름
