@@ -689,6 +689,7 @@ mindmap
         taskExecutor 2-5
         taskScheduler 3
       병렬 처리
+        Chunk 처리
         지역별 병렬 수집
         CompletableFuture
       Rate Limiting
