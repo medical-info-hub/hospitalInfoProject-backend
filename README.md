@@ -85,7 +85,7 @@ MariaDB 10.11
 ```
 Apache Tomcat 10.1
 Docker Container
-Ubuntu Linux 24 (AWS EC2)
+Amazon Linux 2 (AWS EC2)
 ```
 
 ### External APIs
