@@ -47,7 +47,7 @@ graph TB
     end
 
     subgraph "Operating System"
-        Ubuntu["Ubuntu Linux 24 (EC2)"]
+        Ubuntu["Amazon Linux 2 (EC2)"]
     end
 
     subgraph "Data & Monitoring"
@@ -87,13 +87,13 @@ graph TB
     Spring --> Tomcat
     Tomcat --> JRE
     JRE --> Docker
-    Docker --> Ubuntu
+    Docker --> Linux
 
     HospitalMain --> MariaDB
     Micrometer --> Prometheus
     Prometheus --> Grafana
     Docker --> cAdvisor
-    Ubuntu --> NodeExporter
+    Linux --> NodeExporter
     cAdvisor --> Prometheus
     NodeExporter --> Prometheus
 
@@ -489,7 +489,7 @@ graph TB
         Artifact[WAR 파일<br/>hospital_main.war]
     end
 
-    subgraph "EC2 Instance (Ubuntu 24)"
+    subgraph "EC2 Instance (Amazon Linux 2)"
         subgraph "Docker Container"
             subgraph "Tomcat 10.1"
                 subgraph "Spring Framework 6.0.13"
@@ -848,7 +848,7 @@ graph LR
 
 
 ### 핵심 기술 스택
-- **Runtime**: JRE 21 (Amazon Corretto) → Docker Container → Ubuntu Linux 24 (EC2)
+- **Runtime**: JRE 21 (Amazon Corretto) → Docker Container → Amazon Linux 2 (EC2)
 - **Framework**: Spring Framework 6.0.13 + Spring MVC + Spring Data JPA
 - **Database**: MariaDB 10.11 (PostGIS 공간 데이터)
 - **Container**: Apache Tomcat 10.1
