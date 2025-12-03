@@ -116,7 +116,7 @@ graph TB
 graph TB
     subgraph "프레젠테이션 계층 (Presentation Layer)"
         Controllers["Controllers (11개)<br/>- HospitalApiController<br/>- HospitalWebController<br/>- EmergencyApiController<br/>- StatisticsApiController<br/>- UnifiedSearchController<br/>- ChatbotController<br/>- YouTubeController<br/>- MonitoringController 등"]
-        WSHandler["WebSocket Handler<br/>- EmergencyApiWebSocketHandler"]
+        WSHandler["WebSocket Handler<br/>- EmergencyApiWebSocketHandler<br/> ChatBotWebSocketHandler"]
     end
 
     subgraph "비즈니스 로직 계층 (Service Layer)"
