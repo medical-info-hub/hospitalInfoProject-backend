@@ -152,6 +152,10 @@ http {
 }
 EOF
 
+    # Nginx 설정을 컨테이너에 복사
+    echo "📋 Nginx 컨테이너에 설정 파일 복사 중..."
+    docker cp /opt/hospital/config/nginx/nginx.conf hospital-nginx:/etc/nginx/nginx.conf
+    
     # Nginx 설정 리로드
     if docker exec hospital-nginx nginx -t > /dev/null 2>&1; then
         docker exec hospital-nginx nginx -s reload
@@ -195,6 +199,11 @@ if [ "$ACTIVE_CONTAINER" = "none" ]; then
     
     # MariaDB와 Nginx, Blue 컨테이너 시작
     docker-compose -f $COMPOSE_FILE up -d mariadb nginx backend-blue
+    
+    # Nginx 설정 초기화
+    echo "📝 Nginx 초기 설정 적용 중..."
+    sleep 5  # Nginx 컨테이너 시작 대기
+    update_nginx_config "blue" "blue"
     
     # Blue 컨테이너 헬스체크
     if wait_for_health "blue"; then
