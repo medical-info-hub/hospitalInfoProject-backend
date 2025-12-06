@@ -111,10 +111,9 @@ http {
     gzip_types text/plain text/css text/xml text/javascript 
                application/json application/javascript application/xml+rss;
 
-    upstream backend {
-        server hospital-backend-${primary}:8888 max_fails=3 fail_timeout=30s;
-        server hospital-backend-${backup}:8888 max_fails=3 fail_timeout=30s backup;
-    }
+    # Docker의 내부 DNS resolver 사용
+    resolver 127.0.0.11 valid=10s;
+    resolver_timeout 5s;
 
     server {
         listen 80;
@@ -129,7 +128,11 @@ http {
         }
 
         location / {
-            proxy_pass http://backend;
+            # Primary 백엔드로 설정
+            set \$backend "hospital-backend-${primary}:8888";
+            
+            proxy_pass http://\$backend;
+            proxy_next_upstream error timeout http_502 http_503 http_504;
             proxy_http_version 1.1;
             
             proxy_set_header Host \$host;

@@ -242,11 +242,9 @@ http {
                application/rss+xml font/truetype font/opentype 
                application/vnd.ms-fontobject image/svg+xml;
 
-    # Upstream 서버 정의 (Blue-Green)
-    upstream backend {
-        server hospital-backend-blue:8888 max_fails=3 fail_timeout=30s;
-        server hospital-backend-green:8888 max_fails=3 fail_timeout=30s backup;
-    }
+    # Docker의 내부 DNS resolver 사용 (컨테이너 동적 탐지)
+    resolver 127.0.0.11 valid=10s;
+    resolver_timeout 5s;
 
     server {
         listen 80;
@@ -267,9 +265,14 @@ http {
             add_header Content-Type text/plain;
         }
 
-        # API 프록시 설정
+        # API 프록시 설정 (동적 upstream)
         location / {
-            proxy_pass http://backend;
+            # 변수를 사용하여 동적 해석 활성화
+            set \$backend "hospital-backend-blue:8888";
+            
+            # Blue 컨테이너 우선, 실패 시 Green으로 fallback
+            proxy_pass http://\$backend;
+            proxy_next_upstream error timeout http_502 http_503 http_504;
             proxy_http_version 1.1;
             
             # 헤더 설정
@@ -280,18 +283,13 @@ http {
             proxy_set_header X-Forwarded-Host \$host;
             proxy_set_header X-Forwarded-Port \$server_port;
 
-            # WebSocket 지원 (필요한 경우)
+            # WebSocket 지원
             proxy_set_header Upgrade \$http_upgrade;
             proxy_set_header Connection "upgrade";
 
             # 버퍼링 설정
             proxy_buffering off;
             proxy_request_buffering off;
-
-            # 타임아웃
-            proxy_connect_timeout 60s;
-            proxy_send_timeout 60s;
-            proxy_read_timeout 60s;
         }
 
         # 에러 페이지
@@ -300,9 +298,6 @@ http {
             root /usr/share/nginx/html;
         }
     }
-
-    # include 디렉토리의 추가 설정 파일
-    include /etc/nginx/conf.d/*.conf;
 }
 """
                 }
