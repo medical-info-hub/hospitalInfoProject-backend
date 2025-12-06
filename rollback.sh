@@ -11,7 +11,7 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-export COMPOSE_FILE="docker-compose.zero-downtime.yml"
+export COMPOSE_FILE="docker-compose.prod.yml"
 
 # 현재 활성 컨테이너 확인
 function get_active_container() {

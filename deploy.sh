@@ -17,7 +17,7 @@ else
 fi
 
 export IMAGE_TAG=${IMAGE_TAG:-latest}
-export COMPOSE_FILE="docker-compose.zero-downtime.yml"
+export COMPOSE_FILE="docker-compose.prod.yml"
 
 # 색상 정의
 GREEN='\033[0;32m'

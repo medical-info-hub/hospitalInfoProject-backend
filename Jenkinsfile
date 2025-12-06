@@ -312,7 +312,7 @@ http {
         stage('파일 패키징 및 전송') {
             steps {
                 script {
-                    sh "tar -czf deploy_pkg.tar.gz backend.tar.gz env.prod prometheus.yml nginx.conf deploy-zero-downtime.sh rollback.sh docker-compose.zero-downtime.yml"
+                    sh "tar -czf deploy_pkg.tar.gz backend.tar.gz env.prod prometheus.yml nginx.conf deploy.sh rollback.sh docker-compose.prod.yml"
                     
                     sshagent(credentials: ['EC2_PRIVATE_KEY']) {
                         sh "scp -o StrictHostKeyChecking=no deploy_pkg.tar.gz ${EC2_USER}@${EC2_HOST}:/home/ec2-user/"
@@ -352,14 +352,14 @@ http {
                             sudo chown -R ec2-user:ec2-user /opt/hospital/
 
                             # 스크립트 실행 권한 부여
-                            dos2unix deploy-zero-downtime.sh rollback.sh 2>/dev/null || sed -i 's/\\r$//' deploy-zero-downtime.sh rollback.sh
-                            chmod +x deploy-zero-downtime.sh rollback.sh
+                            dos2unix deploy.sh rollback.sh 2>/dev/null || sed -i 's/\\r$//' deploy.sh rollback.sh
+                            chmod +x deploy.sh rollback.sh
 
                             echo "📦 Docker 이미지 로드..."
                             docker load < backend.tar.gz
 
                             echo "▶️ 무중단 배포 스크립트 실행..."
-                            ./deploy-zero-downtime.sh
+                            ./deploy.sh
 
                             # 청소
                             rm -f deploy_pkg.tar.gz backend.tar.gz env.prod prometheus.yml nginx.conf
