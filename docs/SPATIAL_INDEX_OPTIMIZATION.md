@@ -1146,6 +1146,4 @@ WHERE ST_DWithin(
 
 **🗺️ 공간 인덱스로 완벽한 최적화 달성!**
 
-Made with ❤️ by Hospital Info Project Team
-
 </div>
