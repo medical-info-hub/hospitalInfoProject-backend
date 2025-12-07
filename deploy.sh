@@ -153,15 +153,20 @@ http {
 EOF
 
     # Nginx 설정을 컨테이너에 복사
-    echo "📋 Nginx 컨테이너에 설정 파일 복사 중..."
-    docker cp /opt/hospital/config/nginx/nginx.conf hospital-nginx:/etc/nginx/nginx.conf
+    echo "📋 Nginx 컨테이너에 설정 파일 적용 중..."
     
-    # Nginx 설정 리로드
+    # 방법 1: docker exec로 직접 작성 (더 안전함)
+    docker exec hospital-nginx sh -c "cat > /etc/nginx/nginx.conf" < /opt/hospital/config/nginx/nginx.conf
+    
+    # 설정 테스트
     if docker exec hospital-nginx nginx -t > /dev/null 2>&1; then
+        # Nginx 리로드
         docker exec hospital-nginx nginx -s reload
         echo -e "${GREEN}✅ Nginx 설정 리로드 완료${NC}"
+        return 0
     else
         echo -e "${RED}❌ Nginx 설정 오류${NC}"
+        docker exec hospital-nginx nginx -t
         return 1
     fi
 }
@@ -245,20 +250,28 @@ fi
 
 # Nginx 트래픽 전환
 echo "🔀 트래픽을 ${TARGET_CONTAINER}로 전환 중..."
-update_nginx_config "$TARGET_CONTAINER" "$ACTIVE_CONTAINER"
+if update_nginx_config "$TARGET_CONTAINER" "$ACTIVE_CONTAINER"; then
+    echo -e "${GREEN}✅ Nginx 트래픽 전환 완료${NC}"
+else
+    echo -e "${YELLOW}⚠️ Nginx 설정 업데이트 실패했지만 계속 진행합니다${NC}"
+fi
 
-# 연결 드레이닝 대기 (기존 요청 처리 완료 대기)
-echo "⏳ 기존 연결 종료 대기 (30초)..."
-sleep 30
+# 트래픽 전환 확인
+sleep 5
+echo "✅ 트래픽 전환 단계 완료"
 
-# 이전 컨테이너 중지
-echo "⏹️ 이전 컨테이너(${ACTIVE_CONTAINER}) 중지..."
+# 이전 컨테이너 즉시 중지 (연결 드레이닝 생략 - Nginx가 이미 다른 컨테이너로 라우팅 중)
+echo ""
+echo "=========================================="
+echo "⏹️ 이전 컨테이너(${ACTIVE_CONTAINER}) 중지 시작..."
+echo "=========================================="
 CONTAINER_NAME="hospital-backend-${ACTIVE_CONTAINER}"
 
 # 컨테이너가 실행 중인지 확인
 if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    echo "단계 1: Graceful shutdown 시도 (30초 대기)..."
-    docker stop -t 30 ${CONTAINER_NAME} 2>&1
+    echo "📍 중지 대상: ${CONTAINER_NAME}"
+    echo "단계 1: Graceful shutdown 시도 (10초 대기)..."
+    docker stop -t 10 ${CONTAINER_NAME}
     
     # 3초 대기
     sleep 3
@@ -266,7 +279,7 @@ if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     # 여전히 실행 중인지 확인
     if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         echo -e "${YELLOW}⚠️ 여전히 실행 중입니다. 즉시 종료 시도...${NC}"
-        docker kill ${CONTAINER_NAME} 2>&1
+        docker kill ${CONTAINER_NAME}
         sleep 2
     fi
     

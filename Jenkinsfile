@@ -412,14 +412,48 @@ ENDSSH
                                 # Redis 헬스체크
                                 docker exec hospital-redis redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping > /dev/null 2>&1 && echo "✅ Redis 정상" || echo "⚠️ Redis 확인 필요"
                                 
+                                echo ""
+                                echo "=========================================="
+                                echo "🔍 백엔드 컨테이너 정리 시작"
+                                echo "=========================================="
+                                
                                 # 백엔드 컨테이너 개수 확인
-                                BACKEND_COUNT=\$(docker ps | grep -c hospital-backend || echo "0")
-                                if [ "\$BACKEND_COUNT" -eq 1 ]; then
-                                    echo "✅ 백엔드 컨테이너 1개만 실행 중 (정상)"
+                                BACKEND_COUNT=\$(docker ps --format "{{.Names}}" | grep -c "^hospital-backend" || echo "0")
+                                echo "현재 실행 중인 백엔드 컨테이너: \$BACKEND_COUNT 개"
+                                
+                                if [ "\$BACKEND_COUNT" -gt 1 ]; then
+                                    echo "⚠️ 2개 이상 실행 중입니다. 자동 정리를 시작합니다..."
+                                    
+                                    # Nginx가 사용 중인 컨테이너 확인
+                                    ACTIVE_BACKEND=\$(cat /opt/hospital/config/nginx/nginx.conf | grep -oP "hospital-backend-\K(blue|green)" | head -1)
+                                    echo "Nginx 활성 컨테이너: \$ACTIVE_BACKEND"
+                                    
+                                    # 활성이 아닌 컨테이너 강제 종료
+                                    for container in \$(docker ps --format "{{.Names}}" | grep "^hospital-backend"); do
+                                        if [ "\$container" != "hospital-backend-\$ACTIVE_BACKEND" ]; then
+                                            echo "🛑 불필요한 컨테이너 강제 종료: \$container"
+                                            docker kill \$container 2>&1 || docker stop \$container 2>&1 || true
+                                        fi
+                                    done
+                                    
+                                    sleep 3
+                                    
+                                    # 최종 확인
+                                    FINAL_COUNT=\$(docker ps --format "{{.Names}}" | grep -c "^hospital-backend" || echo "0")
+                                    if [ "\$FINAL_COUNT" -eq 1 ]; then
+                                        echo "✅ 정리 완료! 백엔드 컨테이너 1개만 실행 중"
+                                    else
+                                        echo "❌ 정리 실패: 여전히 \$FINAL_COUNT 개 실행 중"
+                                    fi
                                 else
-                                    echo "⚠️ 경고: 백엔드 컨테이너 \$BACKEND_COUNT 개 실행 중"
-                                    docker ps | grep hospital-backend
+                                    echo "✅ 백엔드 컨테이너 1개만 실행 중 (정상)"
                                 fi
+                                
+                                echo "=========================================="
+                                echo ""
+                                echo "📊 최종 백엔드 컨테이너 상태:"
+                                docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep hospital-backend || echo "No backend containers"
+                                echo "=========================================="
                             '
                         """
                     }

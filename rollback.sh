@@ -125,9 +125,12 @@ http {
 EOF
 
     # Nginx 설정을 컨테이너에 복사
-    echo "📋 Nginx 컨테이너에 설정 파일 복사 중..."
-    docker cp /opt/hospital/config/nginx/nginx.conf hospital-nginx:/etc/nginx/nginx.conf
+    echo "📋 Nginx 컨테이너에 설정 파일 적용 중..."
     
+    # docker exec로 직접 작성
+    docker exec hospital-nginx sh -c "cat > /etc/nginx/nginx.conf" < /opt/hospital/config/nginx/nginx.conf
+    
+    # Nginx 리로드
     docker exec hospital-nginx nginx -s reload
     echo -e "${GREEN}✅ Nginx 설정 리로드 완료${NC}"
 }
