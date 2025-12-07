@@ -288,6 +288,40 @@
 			<artifactId>hibernate-spatial</artifactId>
 			<version>6.2.7.Final</version>
 		</dependency>
+
+		<!-- Geohash 라이브러리 -->
+      	<dependency>
+         	<groupId>ch.hsr</groupId>
+         	<artifactId>geohash</artifactId>
+         	<version>1.4.0</version>
+      	</dependency>
+
+      	<!-- Spring Data Redis -->
+      	<dependency>
+         	<groupId>org.springframework.data</groupId>
+         	<artifactId>spring-data-redis</artifactId>
+         	<version>3.0.11</version>
+      	</dependency>
+
+      	<!-- Lettuce (Redis 클라이언트) -->
+      	<dependency>
+    		<groupId>io.lettuce</groupId>
+    		<artifactId>lettuce-core</artifactId>
+    		<version>6.2.6.RELEASE</version>
+    			<exclusions>
+        			<exclusion>
+            		<groupId>io.netty</groupId>
+            		<artifactId>netty-tcnative</artifactId>
+        			</exclusion>
+    			</exclusions>
+		</dependency>
+
+      	<!-- Apache Commons Pool2 (Redis Connection Pool) -->
+      	<dependency>
+         	<groupId>org.apache.commons</groupId>
+         	<artifactId>commons-pool2</artifactId>
+         	<version>2.11.1</version>
+      	</dependency>
 	</dependencies>
 
 
@@ -327,6 +361,8 @@
 	</build>
 
 </project>
+
+
 
 
 

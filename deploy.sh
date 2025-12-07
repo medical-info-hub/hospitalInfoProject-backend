@@ -181,6 +181,7 @@ echo -e "${GREEN}배포 대상 컨테이너: ${TARGET_CONTAINER}${NC}"
 # 필요한 디렉토리 생성
 echo "📁 디렉토리 구조 생성 중..."
 sudo mkdir -p /opt/hospital/data/mariadb
+sudo mkdir -p /opt/hospital/data/redis
 sudo mkdir -p /opt/hospital/logs/backend/blue
 sudo mkdir -p /opt/hospital/logs/backend/green
 sudo mkdir -p /opt/hospital/logs/nginx
@@ -197,8 +198,8 @@ fi
 if [ "$ACTIVE_CONTAINER" = "none" ]; then
     echo -e "${YELLOW}🎬 최초 배포를 시작합니다...${NC}"
     
-    # MariaDB와 Nginx, Blue 컨테이너 시작
-    docker-compose -f $COMPOSE_FILE up -d mariadb nginx backend-blue
+    # MariaDB, Redis, Nginx, Blue 컨테이너 시작
+    docker-compose -f $COMPOSE_FILE up -d mariadb redis nginx backend-blue
     
     # Nginx 설정 초기화
     echo "📝 Nginx 초기 설정 적용 중..."

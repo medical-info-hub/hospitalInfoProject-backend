@@ -1,4 +1,10 @@
 version: '3.9'
+
+networks:
+  hospital-network:
+    name: hospital-network
+    driver: bridge
+
 services:
   # MariaDB 데이터베이스
   mariadb:
@@ -26,6 +32,41 @@ services:
       interval: 10s
       start_period: 30s
 
+  # Redis 캐시
+  redis:
+    image: redis:7-alpine
+    container_name: hospital-redis
+    expose:
+      - "6379"
+    volumes:
+      - /opt/hospital/data/redis:/data
+    command: >
+      sh -c '
+      if [ -n "${REDIS_PASSWORD}" ]; then
+        echo "Starting Redis with password authentication..."
+        redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass "${REDIS_PASSWORD}"
+      else
+        echo "Starting Redis without password..."
+        redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+      fi
+      '
+    restart: unless-stopped
+    networks:
+      - hospital-network
+    healthcheck:
+      test: >
+        sh -c '
+        if [ -n "${REDIS_PASSWORD}" ]; then
+          redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping | grep PONG
+        else
+          redis-cli ping | grep PONG
+        fi
+        '
+      timeout: 3s
+      retries: 5
+      interval: 10s
+      start_period: 10s
+  
   # Nginx 리버스 프록시
   nginx:
     image: nginx:alpine
@@ -57,6 +98,11 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_PROFILES_ACTIVE=${ENVIRONMENT:-production}
+
+      # Redis 연결 정보
+      - REDIS_HOST=${REDIS_HOST:-hospital-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
 
       # API 키 환경변수
       - HOSPITAL_MAIN_API_KEY=${HOSPITAL_MAIN_API_KEY}
@@ -97,6 +143,8 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - hospital-network
@@ -117,6 +165,11 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_PROFILES_ACTIVE=${ENVIRONMENT:-production}
+
+      # Redis 연결 정보
+      - REDIS_HOST=${REDIS_HOST:-hospital-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
 
       # API 키 환경변수
       - HOSPITAL_MAIN_API_KEY=${HOSPITAL_MAIN_API_KEY}
@@ -157,7 +210,9 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
-    restart: "no"  # 수동으로 시작/중지 관리
+      redis:
+        condition: service_healthy
+    restart: "no"
     networks:
       - hospital-network
     healthcheck:
@@ -167,9 +222,4 @@ services:
       interval: 30s
       start_period: 120s
     profiles:
-      - green  # 기본적으로는 시작하지 않음
-
-networks:
-  hospital-network:
-    name: hospital-network
-    driver: bridge
+      - green
