@@ -1,4 +1,10 @@
 version: '3.9'
+
+networks:
+  hospital-network:
+    name: hospital-network
+    driver: bridge
+
 services:
   # MariaDB 데이터베이스
   mariadb:
@@ -34,27 +40,28 @@ services:
       - "6379"
     volumes:
       - /opt/hospital/data/redis:/data
-    # 비밀번호 설정이 없는 경우를 고려한 명령어
     command: >
-      sh -c "
-      if [ -n '${REDIS_PASSWORD:-}' ]; then
-        redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass '${REDIS_PASSWORD}'
+      sh -c '
+      if [ -n "${REDIS_PASSWORD}" ]; then
+        echo "Starting Redis with password authentication..."
+        redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass "${REDIS_PASSWORD}"
       else
+        echo "Starting Redis without password..."
         redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
       fi
-      "
+      '
     restart: unless-stopped
     networks:
       - hospital-network
     healthcheck:
       test: >
-        sh -c "
-        if [ -n '${REDIS_PASSWORD:-}' ]; then
-          redis-cli --no-auth-warning -a '${REDIS_PASSWORD}' ping | grep PONG
+        sh -c '
+        if [ -n "${REDIS_PASSWORD}" ]; then
+          redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping | grep PONG
         else
           redis-cli ping | grep PONG
         fi
-        "
+        '
       timeout: 3s
       retries: 5
       interval: 10s
@@ -93,9 +100,9 @@ services:
       - SPRING_PROFILES_ACTIVE=${ENVIRONMENT:-production}
 
       # Redis 연결 정보
-      - SPRING_DATA_REDIS_HOST=hospital-redis
-      - SPRING_DATA_REDIS_PORT=6379
-      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_HOST=${REDIS_HOST:-hospital-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
 
       # API 키 환경변수
       - HOSPITAL_MAIN_API_KEY=${HOSPITAL_MAIN_API_KEY}
@@ -145,3 +152,74 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8888/actuator/health"]
       timeout: 10s
       retries: 5
+      interval: 30s
+      start_period: 120s
+
+  # Spring 백엔드 - Green (새 버전 배포용)
+  backend-green:
+    image: hospital-backend:${IMAGE_TAG:-latest}
+    container_name: hospital-backend-green
+    environment:
+      - DB_URL=${DB_URL}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_PROFILES_ACTIVE=${ENVIRONMENT:-production}
+
+      # Redis 연결 정보
+      - REDIS_HOST=${REDIS_HOST:-hospital-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # API 키 환경변수
+      - HOSPITAL_MAIN_API_KEY=${HOSPITAL_MAIN_API_KEY}
+      - HOSPITAL_DETAIL_API_KEY=${HOSPITAL_DETAIL_API_KEY}
+      - HOSPITAL_MEDICAL_SUBJECT_API_KEY=${HOSPITAL_MEDICAL_SUBJECT_API_KEY}
+      - HOSPITAL_PRODOC_API_KEY=${HOSPITAL_PRODOC_API_KEY}
+      - HOSPITAL_PHARMACY_API_KEY=${HOSPITAL_PHARMACY_API_KEY}
+      - HOSPITAL_EMERGENCY_API_KEY=${HOSPITAL_EMERGENCY_API_KEY}
+      - API_ADMIN_KEY=${API_ADMIN_KEY}
+
+      # API Base URL 환경변수
+      - HOSPITAL_MAIN_API_BASE_URL=${HOSPITAL_MAIN_API_BASE_URL}
+      - HOSPITAL_DETAIL_API_BASE_URL=${HOSPITAL_DETAIL_API_BASE_URL}
+      - HOSPITAL_MEDICAL_SUBJECT_API_BASE_URL=${HOSPITAL_MEDICAL_SUBJECT_API_BASE_URL}
+      - HOSPITAL_PRODOC_API_BASE_URL=${HOSPITAL_PRODOC_API_BASE_URL}
+      - HOSPITAL_PHARMACY_API_BASE_URL=${HOSPITAL_PHARMACY_API_BASE_URL}
+      - HOSPITAL_EMERGENCY_API_BASE_URL=${HOSPITAL_EMERGENCY_API_BASE_URL}
+      - HOSPITAL_EMERGENCY_LOCATION_API_BASE_URL=${HOSPITAL_EMERGENCY_LOCATION_API_BASE_URL}
+
+      # YouTube API 환경변수
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - YOUTUBE_API_BASE_URL=${YOUTUBE_API_BASE_URL}
+      - YOUTUBE_API_TRUSTED_CHANNELS=${YOUTUBE_API_TRUSTED_CHANNELS}
+
+      # Gemini API 환경변수
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_API_URL=${GEMINI_API_URL}
+      - GEMINI_API_MODEL=${GEMINI_API_MODEL}
+
+      # Chatbot 환경변수
+      - CHATBOT_SYSTEM_PROMPT_FILE=${CHATBOT_SYSTEM_PROMPT_FILE}
+
+      # Disease Statistics API 환경변수
+      - DISEASE_STATS_API_KEY=${DISEASE_STATS_API_KEY}
+      - DISEASE_STATS_API_BASE_URL=${DISEASE_STATS_API_BASE_URL}
+    volumes:
+      - /opt/hospital/logs/backend/green:/app/logs
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - hospital-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/actuator/health"]
+      timeout: 10s
+      retries: 5
+      interval: 30s
+      start_period: 120s
+    profiles:
+      - green
