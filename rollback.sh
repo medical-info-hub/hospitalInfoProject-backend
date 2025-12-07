@@ -197,26 +197,26 @@ sleep 30
 
 # 문제가 있던 컨테이너 중지
 echo "⏹️ ${ACTIVE_CONTAINER} 컨테이너 중지..."
-echo "단계 1: docker-compose stop 시도..."
-docker-compose -f $COMPOSE_FILE stop backend-${ACTIVE_CONTAINER} 2>&1 || echo "docker-compose stop 실패, 계속 진행..."
+CONTAINER_NAME="hospital-backend-${ACTIVE_CONTAINER}"
 
-# 3초 대기
-sleep 3
-
-# 중지 확인 및 강제 중지
-if docker ps --format '{{.Names}}' | grep -q "^hospital-backend-${ACTIVE_CONTAINER}$"; then
-    echo -e "${YELLOW}⚠️ 컨테이너가 여전히 실행 중입니다. 강제 중지 시도...${NC}"
-    echo "단계 2: docker stop 시도..."
-    docker stop hospital-backend-${ACTIVE_CONTAINER} 2>&1 || echo "docker stop 실패, 계속 진행..."
+# 컨테이너가 실행 중인지 확인
+if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo "단계 1: Graceful shutdown 시도 (30초 대기)..."
+    docker stop -t 30 ${CONTAINER_NAME} 2>&1
+    
+    # 3초 대기
     sleep 3
-fi
-
-# 최종 재확인
-if docker ps --format '{{.Names}}' | grep -q "^hospital-backend-${ACTIVE_CONTAINER}$"; then
-    echo -e "${RED}⚠️ 여전히 실행 중입니다. 최종 강제 중지 시도...${NC}"
-    echo "단계 3: docker kill 시도..."
-    docker kill hospital-backend-${ACTIVE_CONTAINER} 2>&1 || echo "docker kill 실패"
-    sleep 2
+    
+    # 여전히 실행 중인지 확인
+    if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        echo -e "${YELLOW}⚠️ 여전히 실행 중입니다. 즉시 종료 시도...${NC}"
+        docker kill ${CONTAINER_NAME} 2>&1
+        sleep 2
+    fi
+    
+    echo -e "${GREEN}✅ ${CONTAINER_NAME} 중지 완료${NC}"
+else
+    echo "ℹ️  ${CONTAINER_NAME}는 이미 중지 상태입니다."
 fi
 
 # 최종 상태 확인
@@ -230,8 +230,24 @@ elif [ "$RUNNING_COUNT" -gt 1 ]; then
     echo -e "${RED}⚠️ 경고: 백엔드 컨테이너가 ${RUNNING_COUNT}개 실행 중입니다!${NC}"
     docker ps --format "table {{.Names}}\t{{.Status}}" | grep hospital-backend
     echo ""
-    echo -e "${YELLOW}💡 수동으로 중지해주세요:${NC}"
-    echo "   docker stop hospital-backend-${ACTIVE_CONTAINER}"
+    echo -e "${YELLOW}💡 자동 정리 시도 중...${NC}"
+    
+    # ROLLBACK_CONTAINER가 아닌 모든 백엔드 컨테이너 강제 중지
+    for container in $(docker ps --format '{{.Names}}' | grep "^hospital-backend"); do
+        if [ "$container" != "hospital-backend-${ROLLBACK_CONTAINER}" ]; then
+            echo "강제 중지: $container"
+            docker kill $container 2>&1 || true
+        fi
+    done
+    
+    sleep 2
+    RUNNING_COUNT=$(docker ps --format '{{.Names}}' | grep -c "^hospital-backend" || echo "0")
+    
+    if [ "$RUNNING_COUNT" -eq 1 ]; then
+        echo -e "${GREEN}✅ 자동 정리 완료! 백엔드 컨테이너 1개만 실행 중${NC}"
+    else
+        echo -e "${RED}❌ 자동 정리 실패. 수동 확인 필요${NC}"
+    fi
 else
     echo -e "${RED}⚠️ 실행 중인 백엔드 컨테이너가 없습니다!${NC}"
 fi
