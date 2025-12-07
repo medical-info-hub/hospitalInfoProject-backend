@@ -15,7 +15,8 @@
 6. [WebSocket 세션 관리](#-websocket-세션-관리)
 7. [전체 아키텍처](#-전체-아키텍처)
 8. [성능 최적화 효과](#-성능-최적화-효과)
-9. [결론](#-결론)
+9. [한계점 및 트레이드오프](#-한계점-및-트레이드오프)
+10. [결론](#-결론)
 
 ---
 
@@ -38,7 +39,7 @@
 ### 핵심 성과
 
 ```diff
-+ On-Demand 스케줄러: 연결 없을 때 API 호출 0건 (100% 절감)
++ On-Demand 스케줄러: 연결 없을 때 API 호출 0건
 + Delta Update: 변경된 병원만 타임스탬프 업데이트
 + 배치 좌표 매핑: N+1 문제 해결 (500번 → 1번 쿼리)
 + EqualsAndHashCode(exclude): 타임스탬프 제외 비교로 정확한 변경 감지
@@ -72,7 +73,7 @@
 ┌────────────────────────────────────────┐
 │  첫 사용자 연결 시 → 스케줄러 시작    │
 │  마지막 사용자 종료 시 → 스케줄러 중지 │
-│  연결 없을 때 → API 호출 0건 ✅        │
+│  연결 없을 때 → API 호출 0건          │
 └────────────────────────────────────────┘
 ```
 
@@ -98,11 +99,11 @@
 ```
 개선된 방식:
 강남병원 응급실:
-14:00 - 가용병상 5개 → 타임스탬프: 14:00 ✅
-14:03 - 가용병상 5개 (변경없음) → 타임스탬프: 14:00 유지 ✅
-14:06 - 가용병상 3개 (변경!) → 타임스탬프: 14:06 업데이트 ✅
+14:00 - 가용병상 5개 → 타임스탬프: 14:00
+14:03 - 가용병상 5개 (변경없음) → 타임스탬프: 14:00 유지
+14:06 - 가용병상 3개 (변경!) → 타임스탬프: 14:06 업데이트
 
-결과: "6분 전 업데이트" = 실제로 6분 전에 병상 수가 바뀜!
+결과: "6분 전 업데이트" = 실제로 6분 전에 병상 수가 바뀜
 ```
 
 ### 문제 3: N+1 좌표 매핑
@@ -110,7 +111,7 @@
 ```
 기존 방식:
 for (EmergencyWebResponse emergency : emergencyList) {
-// 500개 응급실 × 1번 조회 = 500번 쿼리! 😱
+// 500개 응급실 × 1번 조회 = 500번 쿼리
 Coordinate coord = hospitalRepository.findByHpid(emergency.getHpid());
 emergency.setCoordinate(coord);
 }
@@ -129,7 +130,7 @@ List<String> hpidList = emergencyList.stream()
 .map(EmergencyWebResponse::getHpid)
 .collect(Collectors.toList());
 
-// IN 쿼리로 한 번에 조회! ✅
+// IN 쿼리로 한 번에 조회
 Map<String, Coordinate> coordMap =
 emergencyLocationRepository.findCoordinatesByHpidList(hpidList);
 
@@ -189,7 +190,7 @@ System.out.println("WebSocket 연결됨: " + session.getId() +
 boolean isFirstConnection = (sessions.size() == 1);
 
 if (isFirstConnection) {
-// ✅ 첫 접속자 → 스케줄러 시작
+// 첫 접속자 → 스케줄러 시작
 emergencyApiService.onWebSocketConnected();
 System.out.println("첫 연결 - 스케줄러 시작: " + session.getId());
 } else {
@@ -213,7 +214,7 @@ sessions.remove(session);
 System.out.println("WebSocket 연결 해제: " + session.getId() +
 ", 총 연결수: " + sessions.size());
 
-// ✅ 연결된 세션이 없을 때만 스케줄러 중지
+// 연결된 세션이 없을 때만 스케줄러 중지
 if (getConnectedSessionCount() == 0) {
 emergencyApiService.onWebSocketDisconnected();
 }
@@ -233,10 +234,10 @@ private volatile String latestEmergencyJson = null;
 * WebSocket 연결 시 호출 - 첫 번째 연결이면 스케줄러 시작
 */
 public void onWebSocketConnected() {
-// ✅ compareAndSet: false → true로 원자적 변경
+// compareAndSet: false → true로 원자적 변경
 if (schedulerRunning.compareAndSet(false, true)) {
 asyncRunner.runAsyncForAllCities(this::updateCacheFromAsyncResults);
-System.out.println("✅ 응급실 스케줄러 시작 (첫 번째 연결)");
+System.out.println("응급실 스케줄러 시작 (첫 번째 연결)");
 }
 }
 
@@ -245,12 +246,12 @@ System.out.println("✅ 응급실 스케줄러 시작 (첫 번째 연결)");
 */
 public void onWebSocketDisconnected() {
 if (webSocketHandler.getConnectedSessionCount() == 0) {
-// ✅ compareAndSet: true → false로 원자적 변경
+// compareAndSet: true → false로 원자적 변경
 if (schedulerRunning.compareAndSet(true, false)) {
 asyncRunner.stopAsync();
 latestEmergencyJson = null;  // 캐시 삭제
 previousDataMap.clear();     // 이전 데이터 초기화
-System.out.println("✅ 응급실 스케줄러 종료 및 캐시 삭제");
+System.out.println("응급실 스케줄러 종료 및 캐시 삭제");
 }
 }
 }
@@ -271,15 +272,15 @@ private ScheduledFuture<?> scheduledTask;
 */
 public void runAsyncForAllCities(Consumer<List<EmergencyWebResponse>> callback) {
 if (running.compareAndSet(false, true)) {
-log.info("✅ 응급실 3분 주기 스케줄러 시작");
+log.info("응급실 3분 주기 스케줄러 시작");
 
-// ✅ 즉시 첫 실행 (사용자 대기 시간 최소화)
+// 즉시 첫 실행 (사용자 대기 시간 최소화)
 taskScheduler.schedule(
 () -> collectAllCitiesData(callback),
 Instant.now()
 );
 
-// ✅ 3분마다 반복 실행
+// 3분마다 반복 실행
 scheduledTask = taskScheduler.scheduleWithFixedDelay(() -> {
 if (running.get()) {
 try {
@@ -297,14 +298,14 @@ log.error("스케줄 실행 중 오류: {}", e.getMessage());
 */
 public void stopAsync() {
 if (running.compareAndSet(true, false)) {
-log.info("🔄 응급실 스케줄러 중지 요청");
+log.info("응급실 스케줄러 중지 요청");
 
 if (scheduledTask != null && !scheduledTask.isDone()) {
 boolean cancelled = scheduledTask.cancel(false);
-log.info("📋 스케줄 태스크 취소 결과: {}", cancelled);
+log.info("스케줄 태스크 취소 결과: {}", cancelled);
 }
 
-log.info("✅ 응급실 스케줄러 중지 완료");
+log.info("응급실 스케줄러 중지 완료");
 }
 }
 }
@@ -319,7 +320,7 @@ private boolean schedulerRunning = false;
 public void onWebSocketConnected() {
 if (!schedulerRunning) {           // 스레드 1: false 읽음
 schedulerRunning = true;       // 스레드 2: false 읽음 (동시!)
-startScheduler();              // 두 스레드 모두 시작! 😱
+startScheduler();              // 두 스레드 모두 시작 (Race Condition!)
 }
 }
 ```
@@ -333,7 +334,7 @@ public void onWebSocketConnected() {
 // - expect가 현재 값과 같으면 update로 변경하고 true 반환
 // - 다르면 변경하지 않고 false 반환 (원자적 연산!)
 if (schedulerRunning.compareAndSet(false, true)) {
-startScheduler();  // 단 하나의 스레드만 실행! ✅
+startScheduler();  // 단 하나의 스레드만 실행
 }
 }
 ```
@@ -356,7 +357,7 @@ On-Demand 방식:
 - 12시간 × 60분 ÷ 3분 = 240회 API 호출/일
 - 월간: 240 × 30 = 7,200회
 
-절감: 50% 감소! ✅
+절감: 50% 감소
 ```
 
 ---
@@ -445,16 +446,16 @@ if (hpid == null) continue;
 EmergencyWebResponse previousData = previousDataMap.get(hpid);
 
 if (previousData == null) {
-// ✅ 신규 병원 - API의 원본 타임스탬프 유지
+// 신규 병원 - API의 원본 타임스탬프 유지
 changedCount++;
 }
 else if (!previousData.equals(newData)) {
-// ✅ 데이터 변경 - 타임스탬프를 현재 시각으로 업데이트
+// 데이터 변경 - 타임스탬프를 현재 시각으로 업데이트
 newData.updateTimestampToNow();
 changedCount++;
 }
 else {
-// ✅ 변경 없음 - 이전 타임스탬프 유지
+// 변경 없음 - 이전 타임스탬프 유지
 newData.setHvidate(previousData.getHvidate());
 }
 
@@ -475,7 +476,7 @@ return changedCount;
 ├─────────────────────────────────────────────────────────────┤
 │ 병원A: { 가용병상: 5 }                                      │
 │ previousDataMap = {}  (비어있음)                            │
-│ → 신규 병원! API 타임스탬프 유지: "2025-01-10T14:00:00Z"   │
+│ → 신규 병원 - API 타임스탬프 유지: "2025-01-10T14:00:00Z"  │
 │ → previousDataMap.put("A", 병원A)                           │
 └─────────────────────────────────────────────────────────────┘
 
@@ -486,9 +487,9 @@ return changedCount;
 │ previousData = { 가용병상: 5, 타임스탬프: 14:00 }           │
 │                                                             │
 │ equals() 비교 (타임스탬프 제외):                            │
-│   가용병상: 5 == 5 ✅                                       │
-│   → 변경 없음!                                              │
-│   → 이전 타임스탬프 유지: "2025-01-10T14:00:00Z" ✅         │
+│   가용병상: 5 == 5                                          │
+│   → 변경 없음                                               │
+│   → 이전 타임스탬프 유지: "2025-01-10T14:00:00Z"            │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -498,10 +499,10 @@ return changedCount;
 │ previousData = { 가용병상: 5, 타임스탬프: 14:00 }           │
 │                                                             │
 │ equals() 비교 (타임스탬프 제외):                            │
-│   가용병상: 3 != 5 ❌                                       │
-│   → 변경 감지!                                              │
+│   가용병상: 3 != 5                                          │
+│   → 변경 감지                                               │
 │   → updateTimestampToNow() 호출                             │
-│   → 새 타임스탬프: "2025-01-10T14:06:00Z" ✅                │
+│   → 새 타임스탬프: "2025-01-10T14:06:00Z"                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -519,16 +520,16 @@ return changedCount;
 
 // 현재 시각이 14:06이면
 const timeAgo = calculateTimeAgo("2025-01-10T14:00:00Z");
-console.log(timeAgo);  // "6분 전 업데이트" ✅ (정확!)
+console.log(timeAgo);  // "6분 전 업데이트" (정확)
 ```
 
 ### 개선 효과
 
 | 시나리오 | Before (API 타임스탬프) | After (변경 감지) | 개선 |
 |---------|------------------------|------------------|------|
-| 변경 없음 (3분) | "3분 전 업데이트" | "6분 전 업데이트" | ✅ 정확 |
-| 변경 없음 (6분) | "6분 전 업데이트" | "9분 전 업데이트" | ✅ 정확 |
-| 실제 변경 | "9분 전 업데이트" | "방금 업데이트" | ✅ 정확 |
+| 변경 없음 (3분) | "3분 전 업데이트" | "6분 전 업데이트" | 정확 |
+| 변경 없음 (6분) | "6분 전 업데이트" | "9분 전 업데이트" | 정확 |
+| 실제 변경 | "9분 전 업데이트" | "방금 업데이트" | 정확 |
 
 ---
 
@@ -557,7 +558,7 @@ SELECT * FROM emergency_location WHERE hpid = '병원C';
 ...
 SELECT * FROM emergency_location WHERE hpid = '병원500';
 
-총 500번 쿼리! 😱
+총 500번 쿼리
 ```
 
 ### 해결: IN 쿼리 배치 조회
@@ -574,7 +575,7 @@ List<String> hpidList = dtoList.stream()
 .distinct()
 .collect(Collectors.toList());
 
-// 2. EmergencyLocation에서 좌표 배치 조회 (1번 쿼리!)
+// 2. EmergencyLocation에서 좌표 배치 조회 (1번 쿼리)
 Map<String, EmergencyCoordinate> locationMap = new HashMap<>();
 emergencyLocationRepository.findCoordinatesByHpidList(hpidList)
 .forEach(row -> {
@@ -628,7 +629,7 @@ SELECT hpid, coordinate_x, coordinate_y, emergency_address
 FROM emergency_location
 WHERE hpid IN ('병원A', '병원B', '병원C', ..., '병원500');
 
--- 단 1번의 쿼리! ✅
+-- 단 1번의 쿼리
 ```
 
 ### 성능 비교
@@ -644,7 +645,7 @@ style B fill:#90EE90
 | 방식 | 쿼리 수 | 예상 시간 | 개선율 |
 |------|--------|---------|-------|
 | **N+1 (개별 조회)** | 500번 | ~500ms | - |
-| **IN 쿼리 (배치)** | 1번 | ~10ms | **98% 빠름** ✅ |
+| **IN 쿼리 (배치)** | 1번 | ~10ms | 98% 빠름 |
 
 ---
 
@@ -686,7 +687,7 @@ return;
 }
 
 synchronized (sessions) {
-// ✅ 닫힌 세션 자동 제거
+// 닫힌 세션 자동 제거
 sessions.removeIf(session -> !session.isOpen());
 
 int successCount = 0;
@@ -732,7 +733,7 @@ sessions.remove(session);  // 원본 수정 가능!
 */
 public int getConnectedSessionCount() {
 synchronized (sessions) {
-// ✅ 닫힌 세션 정리
+// 닫힌 세션 정리
 sessions.removeIf(session -> !session.isOpen());
 return sessions.size();
 }
@@ -868,9 +869,9 @@ style B fill:#90EE90
 
 | 시나리오 | 기존 (24시간) | On-Demand | 절감율 |
 |---------|--------------|-----------|-------|
-| **일간 API 호출** | 480회 | 240회 | **50% 감소** ✅ |
-| **월간 API 호출** | 14,400회 | 7,200회 | **50% 감소** ✅ |
-| **새벽 시간 (0-6시)** | 120회 | 0회 | **100% 감소** ✅ |
+| **일간 API 호출** | 480회 | 240회 | 50% 감소 |
+| **월간 API 호출** | 14,400회 | 7,200회 | 50% 감소 |
+| **새벽 시간 (0-6시)** | 120회 | 0회 | 100% 감소 |
 
 ### 2. Delta Update - 타임스탬프 정확도
 
@@ -885,7 +886,7 @@ style B fill:#90EE90
 Delta Update:
 - 변경된 50개만 "방금 업데이트"
 - 나머지 450개는 이전 타임스탬프 유지
-- 정확도: 100% ✅
+- 정확도: 100%
 ```
 
 ### 3. 배치 좌표 매핑 - 쿼리 최적화
@@ -893,14 +894,14 @@ Delta Update:
 | 방식 | 쿼리 수 | 예상 시간 | 개선율 |
 |------|--------|---------|-------|
 | **N+1 (개별 조회)** | 500번 | ~500ms | - |
-| **IN 쿼리 (배치)** | 1번 | ~10ms | **98% 빠름** ✅ |
+| **IN 쿼리 (배치)** | 1번 | ~10ms | 98% 빠름 |
 
 **3분마다 실행 시**:
 ```
 N+1: 500ms × 480회/일 = 240초/일 = 4분/일
 배치: 10ms × 480회/일 = 4.8초/일
 
-절감: 235초/일 = 약 4분/일 ✅
+절감: 235초/일 = 약 4분/일
 ```
 
 ### 4. WebSocket 세션 관리 - 안정성
@@ -917,7 +918,7 @@ N+1: 500ms × 480회/일 = 240초/일 = 4분/일
 - removeIf(!session.isOpen()) 자동 정리
 - 유효 세션: 90개
 - 브로드캐스트 실패: 0%
-- 메모리 안정적 ✅
+- 메모리 안정적
 ```
 
 ### 종합 성능 지표
@@ -933,33 +934,615 @@ N+1: 500ms × 480회/일 = 240초/일 = 4분/일
 <td><b>API 호출 (월간)</b></td>
 <td>14,400회</td>
 <td>7,200회</td>
-<td>🟢 50% 감소</td>
+<td>50% 감소</td>
 </tr>
 <tr>
 <td><b>좌표 매핑 쿼리</b></td>
 <td>500번/실행</td>
 <td>1번/실행</td>
-<td>🟢 99.8% 감소</td>
+<td>99.8% 감소</td>
 </tr>
 <tr>
 <td><b>타임스탬프 정확도</b></td>
 <td>10% (변경률)</td>
 <td>100%</td>
-<td>🟢 완벽</td>
+<td>정확</td>
 </tr>
 <tr>
 <td><b>WebSocket 안정성</b></td>
 <td>세션 누수 위험</td>
 <td>자동 정리</td>
-<td>🟢 안정적</td>
+<td>안정적</td>
 </tr>
 <tr>
 <td><b>초기 연결 속도</b></td>
 <td>3분 대기</td>
 <td>즉시 (캐시)</td>
-<td>🟢 0초</td>
+<td>0초</td>
 </tr>
 </table>
+
+---
+
+## ⚖️ 한계점 및 트레이드오프
+
+이 문서에서 선택한 접근 방식들은 특정 요구사항에 최적화되어 있지만, 모든 상황에 적합한 것은 아닙니다. 각 기술의 한계점과 대안을 이해하고 프로젝트 요구사항에 맞는 선택을 해야 합니다.
+
+### 1. On-Demand 스케줄러의 한계
+
+#### 문제점
+
+##### 1.1 첫 연결 시 Cold Start 지연
+
+```java
+public void onWebSocketConnected() {
+    if (schedulerRunning.compareAndSet(false, true)) {
+        asyncRunner.runAsyncForAllCities(this::updateCacheFromAsyncResults);
+        // 문제: 첫 사용자는 3분 대기할 수 있음 (캐시 없음)
+    }
+}
+```
+
+**시나리오**:
+- 첫 사용자 연결 → 스케줄러 시작 → API 호출 (30초 소요)
+- 두 번째 사용자 연결 (10초 후) → 캐시 없음 → 20초 대기
+
+##### 1.2 AtomicBoolean의 오버헤드
+
+```java
+// AtomicBoolean: CAS (Compare-And-Swap) 오버헤드
+private final AtomicBoolean schedulerRunning = new AtomicBoolean(false);
+
+// 단순 boolean 대비:
+// - 메모리: 16바이트 (vs 1바이트)
+// - CPU: CPU 캐시 무효화 (Volatile semantics)
+```
+
+##### 1.3 복잡도 증가
+
+**코드 복잡도**:
+- 순차 스케줄러: 10줄
+- On-Demand: 100줄 이상 (연결 감지, 시작/중지 로직, AtomicBoolean 관리)
+
+**디버깅 난이도**:
+- "왜 데이터가 안 오지?" → 연결 카운트 확인 필요
+- Race Condition 가능성 (AtomicBoolean이 없다면)
+
+#### 대안 기술
+
+##### 대안 1: 항상 실행 스케줄러
+
+```java
+// 장점: 단순함, Cold Start 없음
+@Scheduled(fixedDelay = 180000)  // 3분마다 실행
+public void updateEmergencyData() {
+    List<EmergencyWebResponse> data = collectAllCitiesData();
+    latestEmergencyJson = objectMapper.writeValueAsString(data);
+}
+
+// 단점: 리소스 낭비 (24시간 실행)
+```
+
+**선택 기준**:
+- 사용률 > 50%: 항상 실행 방식
+- 사용률 < 50%: On-Demand 방식
+
+##### 대안 2: Redis Pub/Sub
+
+```java
+// Spring + Redis Pub/Sub
+@Component
+public class EmergencyDataPublisher {
+
+    @Scheduled(fixedDelay = 180000)
+    public void publishEmergencyData() {
+        List<EmergencyWebResponse> data = collectData();
+        redisTemplate.convertAndSend("emergency-channel", data);
+    }
+}
+
+// WebSocket 핸들러
+@Override
+public void afterConnectionEstablished(WebSocketSession session) {
+    // Redis 구독 시작
+    redisMessageListenerContainer.addMessageListener(
+        messageListener,
+        new ChannelTopic("emergency-channel")
+    );
+}
+```
+
+**장점**:
+- 수평 확장 가능 (여러 서버에서 동일한 채널 구독)
+- 백그라운드 작업과 WebSocket 분리
+
+**단점**:
+- Redis 의존성 추가
+- 네트워크 오버헤드 (Redis ↔ 애플리케이션)
+
+---
+
+### 2. Delta Update의 한계
+
+#### 문제점
+
+##### 2.1 previousDataMap 메모리 오버헤드
+
+```java
+private final Map<String, EmergencyWebResponse> previousDataMap = new HashMap<>();
+
+// 500개 응급실 × 평균 2KB = 1MB
+// 문제: 메모리 상주 데이터
+```
+
+**메모리 사용량**:
+```
+EmergencyWebResponse 1개:
+- hpid: 20B
+- dutyName: 50B
+- availableBeds Map: 500B
+- 기타 필드: 1.5KB
+→ 총 약 2KB
+
+500개 응급실 × 2KB = 1MB (상주 메모리)
+```
+
+##### 2.2 Staleness 위험
+
+```java
+// 시나리오: 스케줄러 중지 후 재시작
+public void onWebSocketDisconnected() {
+    if (schedulerRunning.compareAndSet(true, false)) {
+        previousDataMap.clear();  // 데이터 초기화
+        // 문제: 다음 연결 시 모든 병원이 "변경됨"으로 간주
+    }
+}
+```
+
+**영향**:
+- 첫 실행 시 모든 타임스탬프가 현재 시각으로 갱신
+- 실제 변경 없는 데이터도 "방금 업데이트"로 표시
+
+##### 2.3 @EqualsAndHashCode의 성능 비교 오버헤드
+
+```java
+@EqualsAndHashCode(exclude = "hvidate")
+public class EmergencyWebResponse {
+    private String hpid;
+    private String dutyName;
+    private Map<String, Integer> availableBeds;  // 10개 필드
+    // ... 총 20개 필드
+}
+
+// 매 3분마다 500개 응급실 비교
+// → 500 × 20 필드 = 10,000번 equals 비교
+```
+
+#### 대안 기술
+
+##### 대안 1: API 타임스탬프 그대로 사용
+
+```java
+// 장점: 메모리 절약, 복잡도 감소
+// 단점: 타임스탬프 부정확
+
+EmergencyWebResponse response = EmergencyWebResponse.from(apiItem);
+// API의 타임스탬프를 그대로 사용 (변경 감지 없음)
+```
+
+**선택 기준**:
+- 타임스탬프 정확도가 중요하지 않은 경우 → API 타임스탬프 사용
+- 사용자가 "최근 변경 시각"을 신뢰해야 하는 경우 → Delta Update
+
+##### 대안 2: Hash 기반 변경 감지
+
+```java
+// 전체 객체를 해싱하여 비교 (equals 대신)
+private final Map<String, Integer> previousHashMap = new HashMap<>();
+
+int currentHash = Objects.hash(newData.getHpid(), newData.getAvailableBeds(), ...);
+Integer previousHash = previousHashMap.get(hpid);
+
+if (previousHash == null || !previousHash.equals(currentHash)) {
+    newData.updateTimestampToNow();
+    previousHashMap.put(hpid, currentHash);
+}
+
+// 장점: 메모리 절약 (Integer vs 전체 객체)
+// 단점: Hash 충돌 가능성 (극히 낮음)
+```
+
+##### 대안 3: 데이터베이스 기반 변경 감지
+
+```sql
+-- 데이터베이스에 타임스탬프 컬럼 추가
+ALTER TABLE emergency_room ADD COLUMN last_modified TIMESTAMP;
+
+-- 변경 감지 쿼리
+UPDATE emergency_room
+SET available_beds = ?, last_modified = NOW()
+WHERE hpid = ? AND available_beds != ?;
+```
+
+**장점**:
+- previousDataMap 불필요 (메모리 절약)
+- 서버 재시작에도 타임스탬프 유지
+
+**단점**:
+- 매 3분마다 500번 UPDATE 쿼리
+- DB 의존성 증가
+
+---
+
+### 3. WebSocket의 한계
+
+#### 문제점
+
+##### 3.1 수평 확장의 어려움
+
+```java
+// 현재: 단일 서버 메모리에 세션 저장
+private final Set<WebSocketSession> sessions =
+    Collections.synchronizedSet(new HashSet<>());
+
+// 문제: 서버 A의 세션 ≠ 서버 B의 세션
+```
+
+**시나리오**:
+```
+로드 밸런서
+    ├── 서버 A (사용자 1, 2, 3)
+    └── 서버 B (사용자 4, 5)
+
+스케줄러 업데이트:
+- 서버 A: 사용자 1, 2, 3에게만 전송
+- 서버 B: 사용자 4, 5에게만 전송
+→ 각 서버가 독립적으로 API 호출 (중복)
+```
+
+##### 3.2 Collections.synchronizedSet의 성능 한계
+
+```java
+synchronized (sessions) {
+    sessions.removeIf(session -> !session.isOpen());  // Coarse-grained lock
+    // 모든 세션 순회 동안 락 보유
+}
+
+// 문제: 100명 접속 시 removeIf 실행 중 다른 스레드 대기
+```
+
+**성능 비교**:
+| 동시 접속 | synchronizedSet | ConcurrentHashMap |
+|---------|----------------|-------------------|
+| 10명 | ~1ms | ~0.5ms |
+| 100명 | ~10ms | ~2ms |
+| 1000명 | ~100ms | ~10ms |
+
+##### 3.3 네트워크 불안정성
+
+```java
+// 클라이언트 연결 끊김 → 세션이 즉시 정리되지 않음
+for (WebSocketSession session : sessions) {
+    try {
+        session.sendMessage(new TextMessage(data));
+    } catch (IOException e) {
+        // 전송 실패 시 여기서 에러
+        sessions.remove(session);
+    }
+}
+
+// 문제: 네트워크 끊김 시 예외 발생까지 시간 소요
+```
+
+#### 대안 기술
+
+##### 대안 1: Server-Sent Events (SSE)
+
+```java
+@GetMapping(value = "/emergency-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public Flux<EmergencyWebResponse> streamEmergencyData() {
+    return Flux.interval(Duration.ofMinutes(3))
+        .map(tick -> collectEmergencyData())
+        .flatMapMany(Flux::fromIterable);
+}
+
+// 장점:
+// - 단방향 통신 (서버 → 클라이언트)
+// - HTTP 기반 (프록시 친화적)
+// - 자동 재연결
+
+// 단점:
+// - 클라이언트 → 서버 통신 불가
+```
+
+**선택 기준**:
+- 단방향 데이터 푸시만 필요: SSE
+- 양방향 통신 필요 (예: 사용자 필터링 요청): WebSocket
+
+##### 대안 2: Long Polling
+
+```java
+@GetMapping("/emergency-poll")
+public DeferredResult<List<EmergencyWebResponse>> pollEmergencyData() {
+    DeferredResult<List<EmergencyWebResponse>> result = new DeferredResult<>(30000L);
+
+    // 데이터 변경 시 즉시 응답
+    changeNotifier.addListener(data -> result.setResult(data));
+
+    return result;
+}
+
+// 장점: 모든 HTTP 프록시와 호환
+// 단점: 빈번한 HTTP 요청/응답 (오버헤드)
+```
+
+##### 대안 3: Redis Pub/Sub + WebSocket (수평 확장)
+
+```java
+// RedisMessageListener
+@Component
+public class EmergencyRedisListener implements MessageListener {
+
+    @Override
+    public void onMessage(Message message, byte[] pattern) {
+        String data = new String(message.getBody());
+
+        // 모든 서버의 WebSocket 세션에 브로드캐스트
+        webSocketHandler.broadcastToAllSessions(data);
+    }
+}
+
+// 서버 A, B, C 모두 Redis 채널 구독
+// → 한 서버가 데이터 수집 → Redis 발행 → 모든 서버의 클라이언트에게 전달
+```
+
+**장점**:
+- 수평 확장 가능
+- 중복 API 호출 방지
+
+**단점**:
+- Redis 의존성
+- 추가 네트워크 홉 (지연 증가)
+
+---
+
+### 4. 배치 좌표 매핑의 한계
+
+#### 문제점
+
+##### 4.1 IN 쿼리의 크기 제한
+
+```java
+List<String> hpidList = emergencyList.stream()
+    .map(EmergencyWebResponse::getHpid)
+    .collect(Collectors.toList());
+
+// 문제: 500개 hpid → IN ('병원1', '병원2', ..., '병원500')
+// MySQL IN 절 제한: 일반적으로 1000개 이하 권장
+```
+
+**데이터베이스별 제한**:
+| DB | IN 절 권장 크기 | 초과 시 문제 |
+|----|--------------|-------------|
+| MySQL | ~1000개 | 쿼리 파싱 느려짐 |
+| PostgreSQL | ~32767개 | 에러 발생 |
+| Oracle | ~1000개 | 성능 저하 |
+
+##### 4.2 메모리 오버헤드 (HashMap)
+
+```java
+Map<String, EmergencyCoordinate> locationMap = new HashMap<>();
+// 500개 × (String 20B + Coordinate 40B) = 30KB
+
+// 문제: 매 3분마다 30KB 할당/해제 (GC 부담)
+```
+
+##### 4.3 좌표 없는 병원 필터링
+
+```java
+return dtoList.stream()
+    .filter(dto -> {
+        EmergencyCoordinate coord = locationMap.get(dto.getHpid());
+        if (coord != null) {
+            dto.setCoordinateX(coord.coordinateX);
+            return true;
+        }
+        return false;  // 좌표 없으면 제외 → 데이터 손실!
+    })
+    .collect(Collectors.toList());
+
+// 문제: 좌표 미등록 병원은 응급실 목록에서 제외
+```
+
+#### 대안 기술
+
+##### 대안 1: LEFT JOIN (데이터 손실 방지)
+
+```java
+@Query("""
+    SELECT e.hpid, e.duty_name, e.available_beds,
+           l.coordinate_x, l.coordinate_y, l.emergency_address
+    FROM emergency_room e
+    LEFT JOIN emergency_location l ON e.hpid = l.hpid
+    WHERE e.hpid IN :hpidList
+""")
+List<Object[]> findWithCoordinates(@Param("hpidList") List<String> hpidList);
+
+// 장점: 좌표 없는 병원도 포함 (null 좌표)
+// 단점: JOIN 비용 증가
+```
+
+##### 대안 2: Batch 분할 (대용량 처리)
+
+```java
+// 500개를 100개씩 분할
+List<List<String>> batches = Lists.partition(hpidList, 100);
+
+Map<String, EmergencyCoordinate> allCoordinates = new HashMap<>();
+for (List<String> batch : batches) {
+    Map<String, EmergencyCoordinate> batchResult =
+        emergencyLocationRepository.findCoordinatesByHpidList(batch);
+    allCoordinates.putAll(batchResult);
+}
+
+// 장점: IN 절 크기 제한 회피
+// 단점: 5번 쿼리 실행 (vs 1번)
+```
+
+##### 대안 3: 캐싱 (좌표는 거의 변경 안 됨)
+
+```java
+@Cacheable(value = "emergency-coordinates", key = "#hpid")
+public EmergencyCoordinate getCoordinate(String hpid) {
+    return emergencyLocationRepository.findByHpid(hpid)
+        .map(e -> new EmergencyCoordinate(e.getX(), e.getY(), e.getAddress()))
+        .orElse(null);
+}
+
+// 장점: 두 번째 실행부터 DB 조회 없음
+// 단점: 좌표 변경 시 캐시 무효화 필요
+```
+
+---
+
+### 선택 기준 가이드
+
+| 조건 | 권장 방식 | 비권장 방식 |
+|------|----------|-----------|
+| **사용자 접속률 > 70%** | 항상 실행 스케줄러 | On-Demand |
+| **타임스탬프 정확도 중요** | Delta Update | API 타임스탬프 사용 |
+| **수평 확장 필요 (멀티 서버)** | Redis Pub/Sub | 메모리 기반 WebSocket |
+| **단방향 푸시만 필요** | SSE | WebSocket |
+| **좌표 데이터 변경 빈번** | 매번 배치 조회 | 캐싱 |
+| **IN 쿼리 크기 > 1000** | Batch 분할 | 단일 IN 쿼리 |
+
+---
+
+### 만약 다음 조건이었다면 다른 선택
+
+#### 시나리오 1: 글로벌 서비스 (지연 시간 critical)
+
+**현재 선택**: WebSocket + On-Demand 스케줄러
+
+**더 나은 선택**: CDN + SSE
+
+```java
+// CloudFront + Lambda@Edge
+// - 각 지역(Edge Location)에서 독립적으로 데이터 캐싱
+// - 사용자는 가장 가까운 Edge에서 데이터 수신
+
+@GetMapping(value = "/emergency-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public Flux<EmergencyWebResponse> streamEmergencyData(@RequestParam String region) {
+    return cdnCacheService.getRegionalData(region);  // Edge 캐시
+}
+```
+
+**이유**: 글로벌 사용자에게 낮은 지연시간 보장
+
+#### 시나리오 2: 대규모 트래픽 (10,000+ 동시 접속)
+
+**현재 선택**: Collections.synchronizedSet
+
+**더 나은 선택**: Reactive WebSocket (Spring WebFlux)
+
+```java
+@Component
+public class ReactiveWebSocketHandler implements WebSocketHandler {
+
+    private final Sinks.Many<EmergencyWebResponse> sink =
+        Sinks.many().multicast().onBackpressureBuffer();
+
+    @Override
+    public Mono<Void> handle(WebSocketSession session) {
+        return session.send(
+            sink.asFlux()
+                .map(data -> session.textMessage(toJson(data)))
+        );
+    }
+}
+
+// 장점: Non-blocking, 메모리 효율적
+```
+
+**이유**: 10,000+ 세션 처리 시 Blocking I/O는 스레드 고갈 위험
+
+#### 시나리오 3: 응급실 데이터 변경률 > 50%
+
+**현재 선택**: Delta Update (previousDataMap으로 변경 감지)
+
+**더 나은 선택**: API 타임스탬프 그대로 사용
+
+**이유**:
+- 변경률 > 50%: previousDataMap 메모리 오버헤드 대비 효과 미미
+- 대부분 변경되므로 equals 비교 비용만 증가
+
+#### 시나리오 4: Read-Heavy (조회만 빈번, 업데이트 드묾)
+
+**현재 선택**: 3분마다 API 호출
+
+**더 나은 선택**: 캐싱 + TTL
+
+```java
+@Cacheable(value = "emergency-data", key = "'all'")
+@CacheEvict(value = "emergency-data", allEntries = true,
+            cron = "0 */3 * * * *")  // 3분마다 캐시 무효화
+public List<EmergencyWebResponse> getEmergencyData() {
+    return collectAllCitiesData();
+}
+```
+
+**이유**: 대부분의 요청이 캐시 HIT (API 호출 최소화)
+
+---
+
+### 프로덕션 환경 고려사항
+
+#### 1. 모니터링 필요 지표
+
+```java
+// Metrics 추가
+@Timed("emergency.scheduler.execution")
+public void collectAllCitiesData() { ... }
+
+@Counted("emergency.websocket.connections")
+public void afterConnectionEstablished(WebSocketSession session) { ... }
+
+// 모니터링 항목:
+// - 스케줄러 실행 시간
+// - WebSocket 연결 수
+// - previousDataMap 크기
+// - 변경 감지율 (changedCount / totalCount)
+```
+
+#### 2. 장애 복구 전략
+
+```java
+// Circuit Breaker 추가
+@CircuitBreaker(name = "emergency-api", fallbackMethod = "fallbackData")
+public List<EmergencyWebResponse> collectAllCitiesData() {
+    return emergencyApiCaller.callApi();
+}
+
+public List<EmergencyWebResponse> fallbackData(Exception e) {
+    log.error("API 호출 실패, 캐시 데이터 반환", e);
+    return getCachedData();  // 이전 데이터 반환
+}
+```
+
+#### 3. 성능 테스트
+
+**부하 테스트 시나리오**:
+```
+1. WebSocket 동시 접속 1000명
+2. 3분마다 500개 응급실 데이터 브로드캐스트
+3. 30% 연결/해제 반복
+
+측정 지표:
+- CPU 사용률
+- 메모리 사용량 (previousDataMap, sessions)
+- 브로드캐스트 지연 시간
+- GC 빈도
+```
 
 ---
 
@@ -969,11 +1552,11 @@ N+1: 500ms × 480회/일 = 240초/일 = 4분/일
 
 | 목표 | 결과 | 달성 |
 |------|------|------|
-| 실시간성 | 3분마다 자동 업데이트 | ✅ |
-| 리소스 효율 | 연결 없을 때 API 호출 0건 (50% 절감) | ✅ |
-| 타임스탬프 정확도 | Delta Update로 100% 정확 | ✅ |
-| 초기 연결 속도 | 캐시로 즉시 제공 | ✅ |
-| 안정성 | 자동 세션 정리로 메모리 안정 | ✅ |
+| 실시간성 | 3분마다 자동 업데이트 | 달성 |
+| 리소스 효율 | 연결 없을 때 API 호출 0건 (50% 절감) | 달성 |
+| 타임스탬프 정확도 | Delta Update로 100% 정확 | 달성 |
+| 초기 연결 속도 | 캐시로 즉시 제공 | 달성 |
+| 안정성 | 자동 세션 정리로 메모리 안정 | 달성 |
 
 ### 최적화 효과 요약
 
@@ -985,10 +1568,10 @@ Before (기본 구현):
 - 세션 관리: 수동 정리 필요
 
 After (최적화 완료):
-+ API 호출: On-Demand (7,200회/월, 50% 감소!)
-+ 좌표 매핑: IN 쿼리 (1번/실행, 99.8% 감소!)
-+ 타임스탬프: Delta Update (100% 정확!)
-+ 세션 관리: 자동 정리 (안정적!)
++ API 호출: On-Demand (7,200회/월, 50% 감소)
++ 좌표 매핑: IN 쿼리 (1번/실행, 99.8% 감소)
++ 타임스탬프: Delta Update (100% 정확)
++ 세션 관리: 자동 정리 (안정적)
 ```
 
 ### 핵심 기술 요약
@@ -1002,15 +1585,14 @@ After (최적화 완료):
 | **IN 쿼리** | 배치 조회 | N+1 문제 해결 |
 | **Collections.synchronizedSet** | WebSocket 세션 | Thread-safe Set |
 
-### 기술적 의의
+### 핵심 기술 특징
 
-이 시스템은 단순한 실시간 데이터 전송을 넘어, **리소스 효율과 사용자 경험을 동시에 최적화**한
-            + 사례입니다:
+이 시스템은 실시간 데이터 전송에서 리소스 효율과 사용자 경험을 함께 고려한 구현 사례입니다:
 
-1. **On-Demand 패턴**: 사용자가 없을 때 리소스 절약
-2. **Delta Update**: 변경 감지로 정확한 타임스탬프 제공
-3. **배치 최적화**: N+1 문제 해결로 성능 향상
-4. **동시성 제어**: AtomicBoolean, synchronized로 안정성 확보
+1. **On-Demand 패턴**: 사용자 연결 유무에 따른 리소스 절약
+2. **Delta Update**: 변경 감지 기반 타임스탬프 관리
+3. **배치 최적화**: IN 쿼리를 통한 N+1 문제 해결
+4. **동시성 제어**: AtomicBoolean, synchronized를 활용한 스레드 안전성
 
 ### 향후 개선 가능성
 
@@ -1076,15 +1658,22 @@ sendChangeNotification(newData);  // 푸시 알림
 |------|------|
 | **작성일** | 2025-12-07 |
 | **작성자** | Hospital Info Project Team |
-| **버전** | 1.0 |
+| **버전** | 2.0 |
 | **관련 커밋** | 1341739 (타임스탬프), 8b474d0 (좌표 매핑), 110fc1e (캐시 관리) |
+
+### 변경 이력
+
+| 버전 | 날짜 | 변경 내용 |
+|------|------|----------|
+| 2.0 | 2025-12-07 | 한계점 및 트레이드오프 섹션 추가, 기술적 객관성 강화 |
+| 1.0 | 2025-12-07 | 초기 작성 |
 
 ---
 
 <div align="center">
 
-**🚨 완벽한 실시간 시스템 구축 성공!**
+**실시간 응급실 현황 시스템**
 
-On-Demand + Delta Update + 배치 최적화
+On-Demand 스케줄러 + Delta Update + 배치 좌표 매핑
 
 </div>
