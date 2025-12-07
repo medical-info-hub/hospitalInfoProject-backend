@@ -25,7 +25,26 @@ services:
       retries: 10
       interval: 10s
       start_period: 30s
-
+  # Redis 캐시
+  redis:
+    image: redis:7-alpine
+    container_name: hospital-redis
+    # ports 제거 - 외부 노출 방지! 같은 네트워크 내에서만 접근 가능
+    expose:
+      - "6379"  # 컨테이너 간 통신용
+    volumes:
+      - /opt/hospital/data/redis:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-}
+    restart: unless-stopped
+    networks:
+      - hospital-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-}", "ping"]
+      timeout: 3s
+      retries: 5
+      interval: 10s
+      start_period: 10s
+  
   # Nginx 리버스 프록시
   nginx:
     image: nginx:alpine
