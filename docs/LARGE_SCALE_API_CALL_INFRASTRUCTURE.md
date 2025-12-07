@@ -13,7 +13,8 @@
 4. [2차 최적화: 배치 처리 최적화](#-2차-최적화-배치-처리-최적화)
 5. [구현 세부사항](#-구현-세부사항)
 6. [성능 측정 결과](#-성능-측정-결과)
-7. [결론](#-결론)
+7. [한계점 및 트레이드오프](#-한계점-및-트레이드오프)
+8. [결론](#-결론)
 
 ---
 
@@ -30,9 +31,9 @@
 │  병원 상세정보 API (공공데이터포털)            │
 │                                                │
 │  필수 파라미터: ykiho (병원코드)               │
-│  ❌ 제약사항: 한 번에 1개 병원만 조회 가능     │
+│  제약사항: 한 번에 1개 병원만 조회 가능       │
 │                                                │
-│  79,000개 병원 = 79,000번 API 호출 필요 😱     │
+│  79,000개 병원 = 79,000번 API 호출 필요        │
 └────────────────────────────────────────────────┘
 ```
 
@@ -936,17 +937,417 @@ graph LR
 
 ---
 
-## 🎉 결론
+## ⚖️ 한계점 및 트레이드오프
+
+### 청크 기반 비동기 병렬 처리 방식의 단점
+
+#### 1. 복잡도 증가
+
+**문제**: 순차 처리 대비 코드 복잡도가 크게 증가합니다.
+
+```java
+// Before: 단순한 순차 처리 (10줄)
+for (String code : codes) {
+    process(code);
+}
+
+// After: 비동기 병렬 처리 (100줄 이상)
+- 청크 분할 로직
+- CompletableFuture 관리
+- AtomicInteger 카운터
+- synchronized 동기화
+- 에러 처리
+- 스레드풀 관리
+```
+
+**영향**:
+- 유지보수 난이도 증가
+- 신규 개발자 onboarding 시간 증가
+- 디버깅 어려움 (멀티스레드 환경)
+- 테스트 복잡도 증가 (race condition 테스트 필요)
+
+#### 2. 디버깅의 어려움
+
+**문제**: 멀티스레드 환경에서 문제 추적이 매우 어렵습니다.
+
+```java
+// 순차 처리: 스택 트레이스가 명확
+Exception in thread "main" at line 45
+  at processHospital(code="H12345")
+  at runBatch()
+
+// 비동기 처리: 어느 스레드에서 발생했는지 불명확
+Exception in thread "HospitalDetailAsync-7" at line 234
+  at processChunk()  // 어떤 청크? 어떤 병원?
+  at lambda$runBatchAsync$1()
+  at CompletableFuture$AsyncRun.run()
+```
+
+**대응 방안**:
+```java
+// 상세한 로깅 필수
+log.error("API 호출 실패: 청크={}, 병원코드={}, 스레드={}",
+    chunkIndex, hospitalCode, Thread.currentThread().getName(), e);
+```
+
+**단점**:
+- 로그 양 폭증
+- 로그 분석 도구 필요
+- 재현하기 어려운 버그 발생 가능
+
+#### 3. 메모리 사용량 예측 어려움
+
+**문제**: 동시 실행 스레드 수에 따라 메모리 사용량이 급증할 수 있습니다.
+
+```
+최악의 시나리오:
+- 50개 스레드 동시 실행
+- 각 스레드당 100개 병원 처리 중
+- 각 병원당 평균 2KB 데이터
+
+총 메모리: 50 × 100 × 2KB = 10MB (괜찮음)
+
+하지만:
+- 배치 저장 대기 중인 데이터
+- AtomicInteger 참조
+- CompletableFuture 객체들
+- 스레드 스택 메모리 (각 1MB)
+
+실제 메모리: 10MB + 50MB (스레드) + α = 100MB+
+```
+
+**트레이드오프**:
+```
+스레드 수 많이 (50개):
+  장점: 빠른 처리
+  단점: 높은 메모리 사용, Context Switch 오버헤드
+
+스레드 수 적게 (10개):
+  장점: 낮은 메모리 사용, 안정적
+  단점: 처리 속도 감소
+```
+
+#### 4. API 서버 부하 관리의 어려움
+
+**문제**: Rate Limiter 설정이 부적절하면 API 서버에 과부하를 줄 수 있습니다.
+
+```java
+// 현재: 초당 20건
+RateLimiter rateLimiter = RateLimiter.create(20);
+
+// 만약 50으로 설정하면?
+RateLimiter rateLimiter = RateLimiter.create(50);
+→ API 서버에 과부하 발생 가능
+→ 429 Too Many Requests 응답
+→ 전체 배치 실패 위험
+```
+
+**최적값 찾기**:
+- 너무 낮게: 처리 시간 증가
+- 너무 높게: API 서버 부하, 요청 실패
+- 적정값: 시행착오 필요, API 제공자와 협의 필요
+
+#### 5. 부분 실패 처리의 복잡성
+
+**문제**: 일부 청크만 실패했을 때 처리 로직이 복잡합니다.
+
+```java
+// 시나리오
+청크 1-100: 성공
+청크 101: 실패 (API 타임아웃)
+청크 102-790: 성공
+
+문제점:
+1. 실패한 청크만 재시도해야 하는가?
+2. 전체를 재실행해야 하는가?
+3. 부분 성공 데이터는 어떻게 처리하는가?
+```
+
+**현재 방식의 한계**:
+```java
+// 현재: 실패한 병원만 카운트
+failedCount.incrementAndGet();
+
+// 하지만:
+- 재시도 로직 없음
+- 실패한 병원 리스트 미저장
+- 수동으로 재실행 필요
+```
+
+#### 6. synchronized 병목
+
+**문제**: DB 저장을 synchronized로 순차화하면서 병렬 처리 효과가 일부 상쇄됩니다.
+
+```java
+private synchronized int[] saveBatchAndClear(...) {
+    jdbcRepository.batchInsert(toInsert);  // 순차 저장
+    jdbcRepository.batchUpdate(toUpdate);
+}
+```
+
+**병목 분석**:
+```
+10개 스레드가 동시에 배치 저장 시도
+  ↓
+synchronized로 인해 1개씩만 저장 가능
+  ↓
+나머지 9개 스레드는 대기 (블로킹)
+  ↓
+병렬 처리 효과 감소
+```
+
+**트레이드오프**:
+```
+synchronized 사용:
+  장점: DB 연결 풀 고갈 방지, 안정성
+  단점: 병렬 처리 효과 감소 (일부 직렬화)
+
+synchronized 미사용:
+  장점: 완전한 병렬 처리
+  단점: DB 연결 풀 부족, 데이터 충돌 위험
+```
+
+### 대안 및 선택 기준
+
+#### 대안 1: Spring Batch
+
+**장점**:
+```java
+@Bean
+public Step hospitalDetailStep() {
+    return stepBuilderFactory.get("hospitalDetailStep")
+        .<String, HospitalDetail>chunk(100)
+        .reader(itemReader())
+        .processor(itemProcessor())
+        .writer(itemWriter())
+        .taskExecutor(taskExecutor())  // 병렬 처리
+        .build();
+}
+```
+- 표준화된 배치 프레임워크
+- 실패 재시도, 스킵 정책 내장
+- Job 상태 관리 (재시작 가능)
+- 메타데이터 테이블로 진행 상황 추적
+
+**언제 사용해야 하는가**:
+- 복잡한 배치 워크플로우
+- 실패 복구 전략 필수
+- 정기적인 스케줄 실행 (cron)
+- 멱등성 요구사항 (같은 입력 = 같은 결과)
+
+**단점**:
+- 학습 곡선 높음
+- 설정 복잡도 증가
+- 메타데이터 테이블 관리 필요
+- 오버헤드 (소규모 작업에는 과함)
+
+#### 대안 2: Kafka + Consumer Group
+
+**장점**:
+```java
+// Producer: 병원코드 발행
+kafkaTemplate.send("hospital-codes", hospitalCode);
+
+// Consumer Group: 여러 인스턴스가 분산 처리
+@KafkaListener(topics = "hospital-codes", groupId = "hospital-detail-group")
+public void process(String hospitalCode) {
+    // API 호출 및 저장
+}
+```
+- 수평 확장 용이 (Consumer 추가)
+- 내결함성 (Offset commit)
+- 재처리 보장
+- 분산 시스템에 적합
+
+**언제 사용해야 하는가**:
+- 마이크로서비스 아키텍처
+- 실시간 스트리밍 처리 필요
+- 수평 확장 필수
+- 메시지 큐 인프라 이미 존재
+
+**단점**:
+- Kafka 인프라 필요 (운영 부담)
+- 복잡도 대폭 증가
+- Offset 관리 필요
+- 과도한 인프라 (단일 배치 작업용으로는 과함)
+
+#### 대안 3: 순차 처리 + DB 최적화
+
+**장점**:
+```java
+// 단순한 순차 처리
+for (String code : codes) {
+    process(code);
+}
+
+// 대신 DB 최적화에 집중
+- Batch Insert (100개씩)
+- Connection Pool 최적화
+- 인덱스 최적화
+```
+- 코드 단순성 유지
+- 디버깅 용이
+- 예측 가능한 동작
+
+**언제 사용해야 하는가**:
+- 데이터 규모 작음 (< 10,000건)
+- 복잡도 최소화 우선
+- 단일 서버 환경
+- 처리 시간 덜 중요 (야간 배치 등)
+
+**단점**:
+- 처리 시간 매우 느림 (11시간)
+- CPU 유휴 시간 많음 (I/O 대기)
+- 확장성 부족
+
+### 선택 기준 테이블
+
+| 조건 | 권장 방식 | 이유 |
+|------|----------|------|
+| **대용량 (50,000건 이상)** | 청크 기반 병렬 처리 (현재) | 성능 우선 |
+| **복잡한 워크플로우** | Spring Batch | 재시도, 스킵, 상태 관리 |
+| **분산 시스템** | Kafka + Consumer Group | 수평 확장, 내결함성 |
+| **단순 배치 (< 10,000건)** | 순차 처리 + DB 최적화 | 복잡도 최소화 |
+| **실시간 처리** | Kafka Streams | 지속적인 데이터 유입 |
+| **멱등성 필수** | Spring Batch | Job 재시작 지원 |
+
+### 현재 선택의 정당성
+
+이 프로젝트에서 **청크 기반 CompletableFuture + 배치 저장**을 선택한 이유:
+
+#### 조건 1: 대용량 데이터 (79,000건)
+```
+순차 처리: 11시간 → 실용성 없음
+병렬 처리: 2.6시간 → 실용적
+결정: 병렬 처리 필수
+```
+
+#### 조건 2: 일회성 배치
+```
+특성: 정기 실행 아님, 데이터 갱신용
+Spring Batch: 과도한 인프라
+CompletableFuture: 적절한 복잡도
+```
+
+#### 조건 3: 단일 서버 환경
+```
+배포: Docker Compose (단일 인스턴스)
+Kafka: 불필요한 분산 인프라
+CompletableFuture: 단일 JVM 내 병렬 처리로 충분
+```
+
+#### 조건 4: 개발 속도
+```
+요구사항: 빠른 구현
+Spring Batch 학습: 2-3주 필요
+CompletableFuture: 익숙한 Java 표준 API
+```
+
+### 만약 다음 조건이었다면 다른 선택
+
+#### 시나리오 1: 정기적인 일일 배치
+```
+조건: 매일 자정 실행, 실패 시 재시도 필요
+문제: CompletableFuture는 재시도 로직 없음
+선택: Spring Batch
+이유: Job 재시작, 스킵 정책, 메타데이터 관리
+```
+
+#### 시나리오 2: 마이크로서비스 아키텍처
+```
+조건: 여러 서비스가 병원 데이터 사용, 수평 확장 필요
+문제: 단일 JVM 병렬 처리로는 확장 한계
+선택: Kafka + Multiple Consumer Instances
+이유: 수평 확장, 서비스 간 decoupling
+```
+
+#### 시나리오 3: 소규모 데이터 (< 5,000건)
+```
+조건: 소규모 병원만 처리 (지역 한정)
+문제: 병렬 처리 오버헤드가 이득보다 큼
+선택: 순차 처리 + DB 최적화
+이유: 복잡도 최소화, 처리 시간 충분히 짧음 (< 30분)
+```
+
+### 프로덕션 환경에서 고려할 점
+
+#### 1. 실패 재시도 전략
+
+```java
+// 현재: 실패만 카운트
+failedCount.incrementAndGet();
+
+// 개선: 실패 코드 저장 및 재시도
+private final List<String> failedCodes = new CopyOnWriteArrayList<>();
+
+try {
+    process(code);
+} catch (Exception e) {
+    failedCodes.add(code);
+    failedCount.incrementAndGet();
+}
+
+// 배치 종료 후 재시도
+if (!failedCodes.isEmpty()) {
+    log.info("실패한 {}건 재시도 시작", failedCodes.size());
+    retryFailedCodes(failedCodes);
+}
+```
+
+#### 2. 진행 상황 모니터링
+
+```java
+@Scheduled(fixedRate = 10000)  // 10초마다
+public void logProgress() {
+    int total = hospitalCodes.size();
+    int completed = completedCount.get();
+    double progress = (double) completed / total * 100;
+    long elapsed = System.currentTimeMillis() - startTime;
+    long eta = (long) ((total - completed) / (completed / (elapsed / 1000.0)));
+
+    log.info("진행: {}/{} ({:.1f}%) | 경과: {}분 | 남은 시간: {}분",
+        completed, total, progress,
+        elapsed / 60000, eta / 60);
+}
+```
+
+#### 3. Graceful Shutdown
+
+```java
+@PreDestroy
+public void shutdown() {
+    log.info("서버 종료 시작 - 현재 실행 중인 작업 완료 대기");
+
+    // 새로운 작업 거부
+    executor.shutdown();
+
+    try {
+        // 최대 10분 대기
+        if (!executor.awaitTermination(10, TimeUnit.MINUTES)) {
+            log.warn("타임아웃 - 강제 종료");
+            executor.shutdownNow();
+        }
+    } catch (InterruptedException e) {
+        executor.shutdownNow();
+    }
+
+    log.info("완료: {}, 실패: {}", completedCount.get(), failedCount.get());
+}
+```
+
+---
+
+## 📊 결론
 
 ### 달성한 목표
 
 | 목표 | 결과 | 달성 |
 |------|------|------|
-| 대용량 API 호출 처리 | 79,000건 안정적 처리 | ✅ |
-| 처리 시간 단축 | **76% 단축** (11h → 2.6h) | ✅ |
-| 메모리 효율성 | **90% 감소** (1GB → 100MB) | ✅ |
-| 동시성 안전성 | AtomicInteger로 정확한 카운팅 | ✅ |
-| N+1 문제 해결 | **99% 감소** (79,000번 → 790번) | ✅ |
+| 대용량 API 호출 처리 | 79,000건 안정적 처리 | 완료 |
+| 처리 시간 단축 | 76% 단축 (11h → 2.6h) | 완료 |
+| 메모리 효율성 | 90% 감소 (1GB → 100MB) | 완료 |
+| 동시성 안전성 | AtomicInteger로 정확한 카운팅 | 완료 |
+| N+1 문제 해결 | 99% 감소 (79,000번 → 790번) | 완료 |
 
 ### 최적화 효과 요약
 
@@ -1021,13 +1422,13 @@ graph TD
 
 ### 기술적 의의
 
-이 최적화 과정은 단순히 성능을 개선한 것을 넘어, **문제의 본질을 이해하고 점진적으로 개선하는 엔지니어링 사고**를 보여줍니다:
+이 최적화 과정에서 학습한 주요 개념:
 
 1. **문제의 근본 원인 파악**: API 제약 (1개씩만 조회) + 순차 처리
-2. **창의적 해결책**: 청크 기반 병렬 처리로 병목 우회
+2. **해결책 설계**: 청크 기반 병렬 처리로 병목 우회
 3. **점진적 개선**: 순차 → 비동기 → 배치 최적화
 4. **동시성 제어**: AtomicInteger, ConcurrentHashMap, synchronized
-5. **실측 기반 검증**: 이론치와 실측치 비교로 검증
+5. **트레이드오프 이해**: 복잡도 vs 성능, synchronized vs 완전 병렬
 
 ### 핵심 기술 요약
 
@@ -1113,17 +1514,8 @@ if (failedCount.get() / (double) totalCount > 0.05) {
 |------|------|
 | **작성일** | 2025-12-07 |
 | **작성자** | Hospital Info Project Team |
-| **버전** | 1.0 |
+| **버전** | 2.0 |
 | **관련 커밋** | e02640c (순차→비동기), 558f65c (배치 최적화) |
+| **변경 이력** | v2.0 - 한계점 및 트레이드오프 섹션 추가, 객관적 표현으로 수정 |
 
 ---
-
-<div align="center">
-
-**🚀 완벽한 최적화 성공!**
-
-순차 11시간 → 비동기 2.6시간 (76% 단축)
-
-79,000번 SELECT → 790번 SELECT (99% 감소)
-
-</div>
