@@ -305,10 +305,16 @@
 
       	<!-- Lettuce (Redis 클라이언트) -->
       	<dependency>
-         	<groupId>io.lettuce</groupId>
-         	<artifactId>lettuce-core</artifactId>
-         	<version>6.2.6.RELEASE</version>
-      	</dependency>
+    		<groupId>io.lettuce</groupId>
+    		<artifactId>lettuce-core</artifactId>
+    		<version>6.2.6.RELEASE</version>
+    			<exclusions>
+        			<exclusion>
+            		<groupId>io.netty</groupId>
+            		<artifactId>netty-tcnative</artifactId>
+        			</exclusion>
+    			</exclusions>
+		</dependency>
 
       	<!-- Apache Commons Pool2 (Redis Connection Pool) -->
       	<dependency>
@@ -355,6 +361,7 @@
 	</build>
 
 </project>
+
 
 
 
