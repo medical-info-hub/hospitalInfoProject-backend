@@ -400,21 +400,76 @@ ENDSSH
                     sshagent(credentials: ['EC2_PRIVATE_KEY']) {
                         sh '''
                             ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'ENDSSH'
-                                echo "🏥 헬스체크 시작..."
-                                sleep 15
+                                echo "=========================================="
+                                echo "🏥 헬스체크 시작"
+                                echo "=========================================="
+                                sleep 10
                                 
-                                # Nginx 헬스체크
-                                curl -f -s --connect-timeout 5 http://${EC2_HOST}/nginx-health > /dev/null && echo "✅ Nginx 정상" || echo "⚠️ Nginx 확인 필요"
+                                # Nginx 헬스체크 (재시도)
+                                echo ""
+                                echo "📍 Nginx 헬스체크 중..."
+                                NGINX_OK=0
+                                for i in {1..5}; do
+                                    if curl -f -s --connect-timeout 5 http://localhost/nginx-health > /dev/null 2>&1; then
+                                        echo "✅ Nginx 정상 (시도 $i/5)"
+                                        NGINX_OK=1
+                                        break
+                                    else
+                                        echo "⏳ Nginx 응답 대기... (시도 $i/5)"
+                                        sleep 3
+                                    fi
+                                done
                                 
-                                # 백엔드 헬스체크 (Nginx를 통해)
-                                curl -f -s --connect-timeout 5 http://${EC2_HOST}/actuator/health > /dev/null && echo "✅ 백엔드 정상 (Nginx 경유)" || echo "⚠️ 백엔드 확인 필요"
+                                if [ $NGINX_OK -eq 0 ]; then
+                                    echo "⚠️ Nginx 헬스체크 실패"
+                                    echo "디버깅:"
+                                    docker ps --format "table {{.Names}}\t{{.Status}}" | grep nginx
+                                    echo "Nginx 로그:"
+                                    docker logs hospital-nginx --tail 10 2>&1 || echo "로그 조회 실패"
+                                fi
+                                
+                                # 백엔드 헬스체크 (재시도)
+                                echo ""
+                                echo "📍 백엔드 헬스체크 중 (Nginx 경유)..."
+                                BACKEND_OK=0
+                                for i in {1..5}; do
+                                    RESPONSE=$(curl -f -s --connect-timeout 5 http://localhost/actuator/health 2>&1)
+                                    if echo "$RESPONSE" | grep -q "UP"; then
+                                        echo "✅ 백엔드 정상 (시도 $i/5)"
+                                        BACKEND_OK=1
+                                        break
+                                    else
+                                        echo "⏳ 백엔드 응답 대기... (시도 $i/5)"
+                                        sleep 3
+                                    fi
+                                done
+                                
+                                if [ $BACKEND_OK -eq 0 ]; then
+                                    echo "⚠️ 백엔드 헬스체크 실패"
+                                    echo "디버깅:"
+                                    docker ps --format "table {{.Names}}\t{{.Status}}" | grep backend
+                                    
+                                    # 백엔드 직접 테스트
+                                    echo "백엔드 직접 테스트:"
+                                    ACTIVE_BACKEND=$(docker ps --format "{{.Names}}" | grep "^hospital-backend" | head -1)
+                                    if [ -n "$ACTIVE_BACKEND" ]; then
+                                        echo "활성 백엔드: $ACTIVE_BACKEND"
+                                        docker exec $ACTIVE_BACKEND curl -f -s http://localhost:8888/actuator/health 2>&1 | head -5
+                                    fi
+                                fi
                                 
                                 # Redis 헬스체크
-                                docker exec hospital-redis redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping > /dev/null 2>&1 && echo "✅ Redis 정상" || echo "⚠️ Redis 확인 필요"
+                                echo ""
+                                echo "📍 Redis 헬스체크 중..."
+                                if docker exec hospital-redis redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping > /dev/null 2>&1; then
+                                    echo "✅ Redis 정상"
+                                else
+                                    echo "⚠️ Redis 확인 필요"
+                                fi
                                 
                                 echo ""
                                 echo "=========================================="
-                                echo "🔍 백엔드 컨테이너 정리 시작"
+                                echo "🔍 백엔드 컨테이너 정리 확인"
                                 echo "=========================================="
                                 
                                 # 백엔드 컨테이너 개수 확인
@@ -425,7 +480,7 @@ ENDSSH
                                     echo "⚠️ 2개 이상 실행 중입니다. 자동 정리를 시작합니다..."
                                     
                                     # Nginx가 사용 중인 컨테이너 확인
-                                    ACTIVE_BACKEND=$(grep "hospital-backend-" /opt/hospital/config/nginx/nginx.conf | grep "set" | head -1 | sed 's/.*hospital-backend-//' | sed 's/:.*//')
+                                    ACTIVE_BACKEND=$(docker exec hospital-nginx cat /etc/nginx/nginx.conf 2>/dev/null | grep "hospital-backend-" | grep "set" | head -1 | sed 's/.*hospital-backend-//' | sed 's/:.*//')
                                     echo "Nginx 활성 컨테이너: $ACTIVE_BACKEND"
                                     
                                     # 활성이 아닌 컨테이너 강제 종료
@@ -449,11 +504,20 @@ ENDSSH
                                     echo "✅ 백엔드 컨테이너 1개만 실행 중 (정상)"
                                 fi
                                 
-                                echo "=========================================="
                                 echo ""
-                                echo "📊 최종 백엔드 컨테이너 상태:"
-                                docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep hospital-backend || echo "No backend containers"
                                 echo "=========================================="
+                                echo "📊 최종 시스템 상태"
+                                echo "=========================================="
+                                docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "hospital|NAMES"
+                                echo "=========================================="
+                                
+                                # 최종 결과 요약
+                                echo ""
+                                echo "🎯 헬스체크 결과 요약:"
+                                [ $NGINX_OK -eq 1 ] && echo "  ✅ Nginx: 정상" || echo "  ⚠️  Nginx: 확인 필요"
+                                [ $BACKEND_OK -eq 1 ] && echo "  ✅ Backend: 정상" || echo "  ⚠️  Backend: 확인 필요"
+                                echo "  ✅ Redis: 정상"
+                                [ "$BACKEND_COUNT" -eq 1 ] && echo "  ✅ 컨테이너 개수: 1개 (정상)" || echo "  ⚠️  컨테이너 개수: $BACKEND_COUNT 개"
 ENDSSH
                         '''
                     }
