@@ -81,7 +81,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /opt/hospital/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /opt/hospital/config/nginx/nginx.conf:/etc/nginx/nginx.conf
       - /opt/hospital/logs/nginx:/var/log/nginx
     depends_on:
       - backend-blue
