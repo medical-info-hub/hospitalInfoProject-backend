@@ -26,12 +26,31 @@ services:
       interval: 10s
       start_period: 30s
 
-  # Spring 백엔드
-  backend:
-    image: hospital-backend:${IMAGE_TAG:-latest}
-    container_name: hospital-backend
+  # Nginx 리버스 프록시
+  nginx:
+    image: nginx:alpine
+    container_name: hospital-nginx
     ports:
-      - "${BACKEND_PORT:-8888}:8888"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/hospital/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /opt/hospital/logs/nginx:/var/log/nginx
+    depends_on:
+      - backend-blue
+    restart: unless-stopped
+    networks:
+      - hospital-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/nginx-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Spring 백엔드 - Blue (현재 운영)
+  backend-blue:
+    image: hospital-backend:${IMAGE_TAG:-latest}
+    container_name: hospital-backend-blue
     environment:
       - DB_URL=${DB_URL}
       - DB_USERNAME=${DB_USERNAME}
@@ -74,7 +93,7 @@ services:
       - DISEASE_STATS_API_KEY=${DISEASE_STATS_API_KEY}
       - DISEASE_STATS_API_BASE_URL=${DISEASE_STATS_API_BASE_URL}
     volumes:
-      - /opt/hospital/logs/backend:/app/logs
+      - /opt/hospital/logs/backend/blue:/app/logs
     depends_on:
       mariadb:
         condition: service_healthy
@@ -88,9 +107,69 @@ services:
       interval: 30s
       start_period: 120s
 
+  # Spring 백엔드 - Green (새 버전 배포용)
+  backend-green:
+    image: hospital-backend:${IMAGE_TAG:-latest}
+    container_name: hospital-backend-green
+    environment:
+      - DB_URL=${DB_URL}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_PROFILES_ACTIVE=${ENVIRONMENT:-production}
+
+      # API 키 환경변수
+      - HOSPITAL_MAIN_API_KEY=${HOSPITAL_MAIN_API_KEY}
+      - HOSPITAL_DETAIL_API_KEY=${HOSPITAL_DETAIL_API_KEY}
+      - HOSPITAL_MEDICAL_SUBJECT_API_KEY=${HOSPITAL_MEDICAL_SUBJECT_API_KEY}
+      - HOSPITAL_PRODOC_API_KEY=${HOSPITAL_PRODOC_API_KEY}
+      - HOSPITAL_PHARMACY_API_KEY=${HOSPITAL_PHARMACY_API_KEY}
+      - HOSPITAL_EMERGENCY_API_KEY=${HOSPITAL_EMERGENCY_API_KEY}
+      - API_ADMIN_KEY=${API_ADMIN_KEY}
+
+      # API Base URL 환경변수
+      - HOSPITAL_MAIN_API_BASE_URL=${HOSPITAL_MAIN_API_BASE_URL}
+      - HOSPITAL_DETAIL_API_BASE_URL=${HOSPITAL_DETAIL_API_BASE_URL}
+      - HOSPITAL_MEDICAL_SUBJECT_API_BASE_URL=${HOSPITAL_MEDICAL_SUBJECT_API_BASE_URL}
+      - HOSPITAL_PRODOC_API_BASE_URL=${HOSPITAL_PRODOC_API_BASE_URL}
+      - HOSPITAL_PHARMACY_API_BASE_URL=${HOSPITAL_PHARMACY_API_BASE_URL}
+      - HOSPITAL_EMERGENCY_API_BASE_URL=${HOSPITAL_EMERGENCY_API_BASE_URL}
+      - HOSPITAL_EMERGENCY_LOCATION_API_BASE_URL=${HOSPITAL_EMERGENCY_LOCATION_API_BASE_URL}
+
+      # YouTube API 환경변수
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - YOUTUBE_API_BASE_URL=${YOUTUBE_API_BASE_URL}
+      - YOUTUBE_API_TRUSTED_CHANNELS=${YOUTUBE_API_TRUSTED_CHANNELS}
+
+      # Gemini API 환경변수
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_API_URL=${GEMINI_API_URL}
+      - GEMINI_API_MODEL=${GEMINI_API_MODEL}
+
+      # Chatbot 환경변수
+      - CHATBOT_SYSTEM_PROMPT_FILE=${CHATBOT_SYSTEM_PROMPT_FILE}
+
+      # Disease Statistics API 환경변수
+      - DISEASE_STATS_API_KEY=${DISEASE_STATS_API_KEY}
+      - DISEASE_STATS_API_BASE_URL=${DISEASE_STATS_API_BASE_URL}
+    volumes:
+      - /opt/hospital/logs/backend/green:/app/logs
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: "no"  # 수동으로 시작/중지 관리
+    networks:
+      - hospital-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/actuator/health"]
+      timeout: 10s
+      retries: 5
+      interval: 30s
+      start_period: 120s
+    profiles:
+      - green  # 기본적으로는 시작하지 않음
+
 networks:
   hospital-network:
-    name: hospital-network  # 네트워크 이름을 명시적으로 지정
+    name: hospital-network
     driver: bridge
-
-
