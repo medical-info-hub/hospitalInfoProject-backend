@@ -124,15 +124,18 @@ http {
 }
 EOF
 
-    # Nginx 설정을 컨테이너에 복사
-    echo "📋 Nginx 컨테이너에 설정 파일 적용 중..."
+    # Nginx 설정 파일이 호스트에 저장됨 (볼륨 마운트로 자동 반영됨)
+    echo "📋 Nginx 설정 파일 업데이트 완료 (${primary} 활성)"
     
-    # docker exec로 직접 작성
-    docker exec hospital-nginx sh -c "cat > /etc/nginx/nginx.conf" < /opt/hospital/config/nginx/nginx.conf
+    # Nginx 재시작으로 설정 반영
+    echo "🔄 Nginx 재시작 중..."
+    docker restart hospital-nginx
     
-    # Nginx 리로드
-    docker exec hospital-nginx nginx -s reload
-    echo -e "${GREEN}✅ Nginx 설정 리로드 완료${NC}"
+    # Nginx 시작 대기
+    echo "⏳ Nginx 시작 대기 중..."
+    sleep 5
+    
+    echo -e "${GREEN}✅ Nginx 재시작 완료${NC}"
 }
 
 # 메인 롤백 로직

@@ -152,23 +152,33 @@ http {
 }
 EOF
 
-    # Nginx 설정을 컨테이너에 복사
-    echo "📋 Nginx 컨테이너에 설정 파일 적용 중..."
+    # Nginx 설정 파일이 호스트에 저장됨 (볼륨 마운트로 자동 반영됨)
+    echo "📋 Nginx 설정 파일 업데이트 완료 (${primary} 활성)"
     
-    # 방법 1: docker exec로 직접 작성 (더 안전함)
-    docker exec hospital-nginx sh -c "cat > /etc/nginx/nginx.conf" < /opt/hospital/config/nginx/nginx.conf
+    # Nginx 재시작으로 설정 반영
+    echo "🔄 Nginx 재시작 중..."
+    docker restart hospital-nginx
     
-    # 설정 테스트
-    if docker exec hospital-nginx nginx -t > /dev/null 2>&1; then
-        # Nginx 리로드
-        docker exec hospital-nginx nginx -s reload
-        echo -e "${GREEN}✅ Nginx 설정 리로드 완료${NC}"
-        return 0
-    else
-        echo -e "${RED}❌ Nginx 설정 오류${NC}"
-        docker exec hospital-nginx nginx -t
-        return 1
-    fi
+    # Nginx 시작 대기 및 헬스체크
+    local max_attempts=15
+    local attempt=0
+    
+    echo "⏳ Nginx 시작 대기 중..."
+    sleep 3
+    
+    while [ $attempt -lt $max_attempts ]; do
+        if curl -f -s http://localhost/nginx-health > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Nginx 정상 작동 확인 (${primary} 연결)${NC}"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        echo "대기 중... ($attempt/$max_attempts)"
+        sleep 2
+    done
+    
+    echo -e "${RED}❌ Nginx 재시작 실패${NC}"
+    docker logs hospital-nginx --tail 20
+    return 1
 }
 
 # 메인 배포 로직
@@ -253,7 +263,18 @@ echo "🔀 트래픽을 ${TARGET_CONTAINER}로 전환 중..."
 if update_nginx_config "$TARGET_CONTAINER" "$ACTIVE_CONTAINER"; then
     echo -e "${GREEN}✅ Nginx 트래픽 전환 완료${NC}"
 else
-    echo -e "${YELLOW}⚠️ Nginx 설정 업데이트 실패했지만 계속 진행합니다${NC}"
+    echo -e "${RED}⚠️ Nginx 설정 업데이트 실패!${NC}"
+    echo "🔄 자동 복구: ${ACTIVE_CONTAINER}로 롤백 시도..."
+    
+    # 원래 설정으로 롤백
+    update_nginx_config "$ACTIVE_CONTAINER" "$ACTIVE_CONTAINER" || true
+    
+    # 새 컨테이너 중지
+    echo "⏹️ ${TARGET_CONTAINER} 컨테이너 중지..."
+    docker stop hospital-backend-${TARGET_CONTAINER} 2>&1 || true
+    
+    echo -e "${RED}❌ 배포 실패 - 이전 상태로 복구됨${NC}"
+    exit 1
 fi
 
 # 트래픽 전환 확인
