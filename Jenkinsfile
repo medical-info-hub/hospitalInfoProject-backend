@@ -15,6 +15,9 @@ pipeline {
         DB_URL = credentials('DB_URL')
         DB_USERNAME = credentials('DB_USERNAME')
         
+        // Redis 설정
+        REDIS_PASSWORD = credentials('REDIS_PASSWORD')
+        
         // 모니터링 설정
         GRAFANA_ADMIN_PASSWORD = credentials('GRAFANA_ADMIN_PASSWORD')
         
@@ -78,6 +81,7 @@ pipeline {
         stage('빌드용 Properties 파일 생성') {
             steps {
                 script {
+                    // api.properties
                     writeFile file: 'hospital_main/src/main/resources/api.properties', text: """
 # Hospital API Keys
 hospital.main.api.key=${HOSPITAL_MAIN_API_KEY}
@@ -115,11 +119,22 @@ diseasesStats.api.Key=${DISEASE_STATS_API_KEY}
 diseasesStats.api.base-url=${DISEASE_STATS_API_BASE_URL}
 """
 
+                    // db.properties
                     writeFile file: 'hospital_main/src/main/resources/db.properties', text: """jdbc.driverClassName=org.mariadb.jdbc.Driver
 jdbc.url=${DB_URL}
 jdbc.username=${DB_USERNAME}
 jdbc.password=${DB_PASSWORD}
 """
+
+                    // redis.properties (환경변수 형식 - 백슬래시로 $ 이스케이프)
+                    writeFile file: 'hospital_main/src/main/resources/redis.properties', text: '''# Redis Configuration
+# Docker Compose
+redis.host=${REDIS_HOST:localhost}
+redis.port=${REDIS_PORT:6379}
+redis.password=${REDIS_PASSWORD:}
+# Cache TTL (hours)
+redis.cache.ttl.hours=1
+'''
                 }
             }
         }
@@ -146,6 +161,10 @@ IMAGE_TAG=latest
 DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
 DB_PASSWORD=${DB_PASSWORD}
 DB_PORT=3500
+
+REDIS_HOST=hospital-redis
+REDIS_PORT=6379
+REDIS_PASSWORD=${REDIS_PASSWORD}
 
 BACKEND_HOST=hospital-backend
 BACKEND_PORT=8888
@@ -333,6 +352,7 @@ http {
                             sudo mkdir -p /opt/hospital/config/nginx
                             sudo mkdir -p /opt/hospital/config/prometheus
                             sudo mkdir -p /opt/hospital/data/mariadb
+                            sudo mkdir -p /opt/hospital/data/redis
                             sudo mkdir -p /opt/hospital/logs/backend/blue
                             sudo mkdir -p /opt/hospital/logs/backend/green
                             sudo mkdir -p /opt/hospital/logs/nginx
@@ -379,6 +399,9 @@ ENDSSH
                                 
                                 # 백엔드 헬스체크 (Nginx를 통해)
                                 curl -f -s --connect-timeout 5 http://${EC2_HOST}/actuator/health > /dev/null && echo "✅ 백엔드 정상 (Nginx 경유)" || echo "⚠️ 백엔드 확인 필요"
+                                
+                                # Redis 헬스체크
+                                docker exec hospital-redis redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping > /dev/null 2>&1 && echo "✅ Redis 정상" || echo "⚠️ Redis 확인 필요"
                             '
                         """
                     }
