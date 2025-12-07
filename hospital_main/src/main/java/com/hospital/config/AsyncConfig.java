@@ -65,7 +65,9 @@ public class AsyncConfig {
         System.out.println("Task Scheduler 설정 완료 (풀 크기: 3)");
         return scheduler;
     }
-    
+    /**
+     * 비동기 캐싱용 hospitalTaskExecutor
+     */
     @Bean(name = "hospitalTaskExecutor")
     public Executor hospitalTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

@@ -1,0 +1,158 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" version="29.2.2">
+  <diagram id="sw-architecture" name="SW 구성도">
+    <mxGraphModel dx="1892" dy="1194" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=32;fontStyle=1" value="프로젝트 설계 - SW 구성" vertex="1">
+          <mxGeometry height="40" width="500" x="50" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="external-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#666666;align=left;verticalAlign=top;fontSize=14;fontStyle=1" value="외부서비스연동" vertex="1">
+          <mxGeometry height="450" width="400" x="50" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="kakao-map" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=14;fontStyle=1" value="Kakao Maps SDK v2" vertex="1">
+          <mxGeometry height="80" width="320" x="90" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="gov-api" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=14;fontStyle=1" value="공공데이터포털&#xa;(의료기관/응급실/약국/통계)" vertex="1">
+          <mxGeometry height="80" width="320" x="90" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="youtube-api" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=14;fontStyle=1" value="YouTube API&#xa;(의료 정보 영상)" vertex="1">
+          <mxGeometry height="80" width="150" x="90" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="gemini-api" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=14;fontStyle=1" value="Gemini AI API&#xa;(AI 챗봇)" vertex="1">
+          <mxGeometry height="80" width="150" x="260" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="browser" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=14;fontStyle=1" value="Mobile App(Flutter)" vertex="1">
+          <mxGeometry height="80" width="400" x="640" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="apache" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=14;fontStyle=1" value="Apache HTTP Server&#xa;(Reverse Proxy)" vertex="1">
+          <mxGeometry height="80" width="400" x="640" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="spring-boot" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=14;fontStyle=1" value="Spring Framework 6.0.13&#xa;(Hospital Main Application)" vertex="1">
+          <mxGeometry height="100" width="400" x="640" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="mariadb" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=14;fontStyle=1" value="MariaDB 10.11&#xa;(hospital_api_db)" vertex="1">
+          <mxGeometry height="160" width="200" x="1150" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="data-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" value="데이터 &amp; 모니터링" vertex="1">
+          <mxGeometry height="30" width="200" x="1150" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="prometheus" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="Prometheus&#xa;(Metrics Collection)" vertex="1">
+          <mxGeometry height="60" width="200" x="1150" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="grafana" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="Grafana&#xa;(Dashboard)" vertex="1">
+          <mxGeometry height="60" width="200" x="1150" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="cadvisor" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="cAdvisor&#xa;(Container Metrics)" vertex="1">
+          <mxGeometry height="60" width="200" x="1380" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="node-exporter" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="Node Exporter&#xa;(System Metrics)" vertex="1">
+          <mxGeometry height="60" width="200" x="1380" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="cicd-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" value="CI/CD Pipeline" vertex="1">
+          <mxGeometry height="30" width="200" x="50" y="750" as="geometry" />
+        </mxCell>
+        <mxCell id="jenkins" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="Jenkins&#xa;(CI/CD Automation)" vertex="1">
+          <mxGeometry height="60" width="200" x="50" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="maven" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4D9078;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="Maven 3.9&#xa;(Build Tool)" vertex="1">
+          <mxGeometry height="60" width="200" x="270" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="platform-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" value="Runtime Platform Stack" vertex="1">
+          <mxGeometry height="30" width="250" x="640" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="tomcat" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#5A9F8A;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="Apache Tomcat 10.1 (Servlet Container)" vertex="1">
+          <mxGeometry height="40" width="400" x="640" y="570" as="geometry" />
+        </mxCell>
+        <mxCell id="jre" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#6AB09E;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="JRE 21 (Amazon Corretto)" vertex="1">
+          <mxGeometry height="40" width="400" x="640" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="docker" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7AC1B2;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="Docker Container" vertex="1">
+          <mxGeometry height="40" width="400" x="640" y="670" as="geometry" />
+        </mxCell>
+        <mxCell id="ubuntu" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#8AD2C6;strokeColor=#2C5F4F;fontColor=#FFFFFF;fontSize=12;fontStyle=1" value="Amazon Linux 2" vertex="1">
+          <mxGeometry height="40" width="400" x="640" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="edge1" edge="1" parent="1" source="kakao-map" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11" target="browser" value="Native SDK">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge3" edge="1" parent="1" source="gov-api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11;entryX=0;entryY=0.3;entryDx=0;entryDy=0" target="spring-boot" value="REST API&#xa;over https">
+          <mxGeometry relative="1" x="-0.2" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge4" edge="1" parent="1" source="youtube-api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11;entryX=0;entryY=0.6;entryDx=0;entryDy=0" target="spring-boot" value="REST API&#xa;over https">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="165" y="440" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge5" edge="1" parent="1" source="gemini-api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11;entryX=0;entryY=0.7;entryDx=0;entryDy=0" target="spring-boot" value="REST API&#xa;over https">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="335" y="450" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge6" edge="1" parent="1" source="browser" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11" target="apache" value="REST API over&#xa;http/https, websocket">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge7" edge="1" parent="1" source="apache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11" target="spring-boot" value="ajp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge8" edge="1" parent="1" source="spring-boot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11" target="mariadb" value="jdbc, jpa">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge9" edge="1" parent="1" source="spring-boot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11;dashed=1" target="prometheus" value="metrics">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1100" y="430" />
+              <mxPoint x="1100" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge10" edge="1" parent="1" source="docker" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11;dashed=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0" target="cadvisor" value="metrics">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1100" y="690" />
+              <mxPoint x="1100" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge12" edge="1" parent="1" source="prometheus" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11;endArrow=classic;endFill=1" target="grafana" value="query">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge15" edge="1" parent="1" source="jenkins" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11" target="maven" value="trigger">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge16" edge="1" parent="1" source="maven" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;fontSize=11;entryX=0;entryY=0.5;entryDx=0;entryDy=0" target="docker" value="deploy WAR">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="370" y="900" />
+              <mxPoint x="520" y="900" />
+              <mxPoint x="520" y="690" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="footer" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontStyle=2;fontColor=#666666" value="software architecture building blocks" vertex="1">
+          <mxGeometry height="30" width="400" x="640" y="1150" as="geometry" />
+        </mxCell>
+        <mxCell id="3yYnd2w5TdnkE4HPAYcb-2" edge="1" parent="1" style="endArrow=classic;html=1;rounded=0;strokeColor=light-dark(#000000,#999999);strokeWidth=2;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="1380" y="670" as="sourcePoint" />
+            <mxPoint x="1350" y="590" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="3yYnd2w5TdnkE4HPAYcb-3" edge="1" parent="1" source="prometheus" style="endArrow=classic;html=1;rounded=0;strokeColor=light-dark(#000000,#999999);strokeWidth=2;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" target="node-exporter" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="1390" y="700" as="sourcePoint" />
+            <mxPoint x="1360" y="620" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

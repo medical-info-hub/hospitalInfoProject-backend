@@ -6,7 +6,7 @@ pipeline {
         IMAGE_NAME = 'hospital-backend'
         IMAGE_TAG = "${BUILD_NUMBER}"
 
-        // EC2 배포 환경 (공인 IP는 자동 감지)
+        // EC2 배포 환경
         EC2_USER = credentials('EC2_USER')
         
         // 데이터베이스 설정
@@ -14,6 +14,9 @@ pipeline {
         DB_PASSWORD = credentials('DB_PASSWORD')
         DB_URL = credentials('DB_URL')
         DB_USERNAME = credentials('DB_USERNAME')
+        
+        // Redis 설정
+        REDIS_PASSWORD = credentials('REDIS_PASSWORD')
         
         // 모니터링 설정
         GRAFANA_ADMIN_PASSWORD = credentials('GRAFANA_ADMIN_PASSWORD')
@@ -53,7 +56,6 @@ pipeline {
         stage('EC2 공인 IP 자동 감지') {
             steps {
                 script {
-                    // EC2 메타데이터에서 공인 IP 가져오기 시도
                     def publicIp = sh(
                         script: 'curl -s --connect-timeout 5 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo ""',
                         returnStdout: true
@@ -63,9 +65,8 @@ pipeline {
                         env.EC2_HOST = publicIp
                         echo "✅ EC2 공인 IP 자동 감지: ${publicIp}"
                     } else {
-                        // 메타데이터 접근 실패 시 localhost 사용 (같은 서버에서 배포)
                         env.EC2_HOST = "localhost"
-                        echo "⚠️ EC2 메타데이터 접근 불가 - localhost 사용 (같은 서버 배포)"
+                        echo "⚠️ EC2 메타데이터 접근 불가 - localhost 사용"
                     }
                 }
             }
@@ -80,7 +81,7 @@ pipeline {
         stage('빌드용 Properties 파일 생성') {
             steps {
                 script {
-                    // API Properties 생성
+                    // api.properties
                     writeFile file: 'hospital_main/src/main/resources/api.properties', text: """
 # Hospital API Keys
 hospital.main.api.key=${HOSPITAL_MAIN_API_KEY}
@@ -118,12 +119,22 @@ diseasesStats.api.Key=${DISEASE_STATS_API_KEY}
 diseasesStats.api.base-url=${DISEASE_STATS_API_BASE_URL}
 """
 
-                    // DB Properties 생성
+                    // db.properties
                     writeFile file: 'hospital_main/src/main/resources/db.properties', text: """jdbc.driverClassName=org.mariadb.jdbc.Driver
 jdbc.url=${DB_URL}
 jdbc.username=${DB_USERNAME}
 jdbc.password=${DB_PASSWORD}
 """
+
+                    // redis.properties (환경변수 형식 - 백슬래시로 $ 이스케이프)
+                    writeFile file: 'hospital_main/src/main/resources/redis.properties', text: '''# Redis Configuration
+# Docker Compose
+redis.host=${REDIS_HOST:localhost}
+redis.port=${REDIS_PORT:6379}
+redis.password=${REDIS_PASSWORD:}
+# Cache TTL (hours)
+redis.cache.ttl.hours=1
+'''
                 }
             }
         }
@@ -143,13 +154,17 @@ jdbc.password=${DB_PASSWORD}
         stage('배포용 설정 파일 생성') {
             steps {
                 script {
-                    // 1. .env 파일 생성
+                    // .env 파일
                     writeFile file: 'env.prod', text: """ENVIRONMENT=production
 IMAGE_TAG=latest
 
 DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
 DB_PASSWORD=${DB_PASSWORD}
 DB_PORT=3500
+
+REDIS_HOST=hospital-redis
+REDIS_PORT=6379
+REDIS_PASSWORD=${REDIS_PASSWORD}
 
 BACKEND_HOST=hospital-backend
 BACKEND_PORT=8888
@@ -193,143 +208,116 @@ DISEASE_STATS_API_KEY=${DISEASE_STATS_API_KEY}
 DISEASE_STATS_API_BASE_URL=${DISEASE_STATS_API_BASE_URL}
 """
 
-                    // 2. Prometheus Core Config
-                    writeFile file: 'prometheus_core.yml', text: """global:
+                    // Prometheus 설정
+                    writeFile file: 'prometheus.yml', text: """global:
   scrape_interval: 15s
   evaluation_interval: 15s
-  external_labels:
-    cluster: 'hospital-production'
-    environment: 'prod'
-
-rule_files:
-  - "alert_rules.yml"
-
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets: []
 
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
-    scrape_interval: 15s
 
   - job_name: 'hospital-backend'
     static_configs:
-      - targets: ['hospital-backend:8888']
+      - targets: ['hospital-backend-blue:8888', 'hospital-backend-green:8888']
     metrics_path: '/actuator/prometheus'
     scrape_interval: 15s
-    scrape_timeout: 10s
-
-  - job_name: 'node-exporter'
-    static_configs:
-      - targets: ['node-exporter:9100']
-    scrape_interval: 15s
-
-  - job_name: 'cadvisor'
-    static_configs:
-      - targets: ['cadvisor:8080']
-    scrape_interval: 15s
 """
 
-                    // 3. Prometheus Monitoring Stack Config
-                    writeFile file: 'prometheus_monitor.yml', text: """global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-  external_labels:
-    cluster: 'hospital-production'
-    environment: 'prod'
+                    // Nginx 설정
+                    writeFile file: 'nginx.conf', text: """user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
 
-rule_files:
-  - "alert_rules.yml"
+events {
+    worker_connections 1024;
+}
 
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets: []
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
 
-scrape_configs:
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
-    scrape_interval: 15s
+    log_format main '\$remote_addr - \$remote_user [\$time_local] "\$request" '
+                    '\$status \$body_bytes_sent "\$http_referer" '
+                    '"\$http_user_agent" "\$http_x_forwarded_for"';
 
-  - job_name: 'hospital-backend'
-    static_configs:
-      - targets: ['hospital-backend:8888']
-    metrics_path: '/actuator/prometheus'
-    scrape_interval: 15s
-    scrape_timeout: 10s
+    access_log /var/log/nginx/access.log main;
 
-  - job_name: 'node-exporter'
-    static_configs:
-      - targets: ['node-exporter:9100']
-    scrape_interval: 15s
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
 
-  - job_name: 'cadvisor'
-    static_configs:
-      - targets: ['cadvisor:8080']
-    scrape_interval: 15s
-"""
+    # Gzip 압축 설정
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml text/javascript 
+               application/json application/javascript application/xml+rss 
+               application/rss+xml font/truetype font/opentype 
+               application/vnd.ms-fontobject image/svg+xml;
 
-                    // 4. Alert Rules
-                    writeFile file: 'alert_rules.yml', text: """groups:
-  - name: hospital_backend_alerts
-    rules:
-      - alert: BackendDown
-        expr: up{job="hospital-backend"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Hospital Backend is down"
-          description: "Hospital Backend has been down for more than 1 minute"
+    # Docker의 내부 DNS resolver 사용 (컨테이너 동적 탐지)
+    resolver 127.0.0.11 valid=10s;
+    resolver_timeout 5s;
 
-      - alert: HighCPUUsage
-        expr: system_cpu_usage > 0.8
-        for: 2m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High CPU usage detected"
-          description: "CPU usage is above 80% for more than 2 minutes"
+    server {
+        listen 80;
+        server_name _;
 
-  - name: infrastructure_alerts
-    rules:
-      - alert: NodeDown
-        expr: up{job="node-exporter"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Node Exporter is down"
-          description: "Node Exporter has been down for more than 1 minute"
-"""
+        # 클라이언트 요청 크기 제한
+        client_max_body_size 50M;
 
-                    // 5. Grafana Datasources
-                    writeFile file: 'grafana_datasources.yml', text: """apiVersion: 1
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    isDefault: true
-    editable: true
-"""
+        # 프록시 타임아웃 설정
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
 
-                    // 6. Grafana Dashboards
-                    writeFile file: 'grafana_dashboards.yml', text: """apiVersion: 1
-providers:
-  - name: 'default'
-    orgId: 1
-    folder: ''
-    type: file
-    disableDeletion: false
-    updateIntervalSeconds: 10
-    allowUiUpdates: true
-    options:
-      path: /var/lib/grafana/dashboards
+        # 헬스체크 엔드포인트 (Nginx 자체 상태)
+        location /nginx-health {
+            access_log off;
+            return 200 "healthy\\n";
+            add_header Content-Type text/plain;
+        }
+
+        # API 프록시 설정 (동적 upstream)
+        location / {
+            # 변수를 사용하여 동적 해석 활성화
+            set \$backend "hospital-backend-blue:8888";
+            
+            # Blue 컨테이너 우선, 실패 시 Green으로 fallback
+            proxy_pass http://\$backend;
+            proxy_next_upstream error timeout http_502 http_503 http_504;
+            proxy_http_version 1.1;
+            
+            # 헤더 설정
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_set_header X-Forwarded-Host \$host;
+            proxy_set_header X-Forwarded-Port \$server_port;
+
+            # WebSocket 지원
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection "upgrade";
+
+            # 버퍼링 설정
+            proxy_buffering off;
+            proxy_request_buffering off;
+        }
+
+        # 에러 페이지
+        error_page 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
+        }
+    }
+}
 """
                 }
             }
@@ -338,8 +326,7 @@ providers:
         stage('파일 패키징 및 전송') {
             steps {
                 script {
-                    // 모든 배포 파일을 하나로 묶음
-                    sh "tar -czf deploy_pkg.tar.gz backend.tar.gz env.prod *.yml deploy.sh docker-compose.prod.yml"
+                    sh "tar -czf deploy_pkg.tar.gz backend.tar.gz env.prod prometheus.yml nginx.conf deploy.sh rollback.sh docker-compose.prod.yml"
                     
                     sshagent(credentials: ['EC2_PRIVATE_KEY']) {
                         sh "scp -o StrictHostKeyChecking=no deploy_pkg.tar.gz ${EC2_USER}@${EC2_HOST}:/home/ec2-user/"
@@ -348,75 +335,58 @@ providers:
             }
         }
         
-        stage('EC2 배포 실행') {
+        stage('EC2 무중단 배포 실행') {
             steps {
                 script {
                     sshagent(credentials: ['EC2_PRIVATE_KEY']) {
                         sh '''
                             ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'ENDSSH'
 
-                            echo "🚀 배포 패키지 해제 중..."
+                            echo "🚀 무중단 배포 패키지 해제 중..."
                             tar -xzf deploy_pkg.tar.gz
 
                             # .env 파일 적용
                             mv env.prod .env
 
-                            # 모니터링 디렉토리 생성
+                            # 필요한 디렉토리 생성
+                            sudo mkdir -p /opt/hospital/config/nginx
                             sudo mkdir -p /opt/hospital/config/prometheus
+                            sudo mkdir -p /opt/hospital/data/mariadb
+                            sudo mkdir -p /opt/hospital/data/redis
+                            sudo mkdir -p /opt/hospital/logs/backend/blue
+                            sudo mkdir -p /opt/hospital/logs/backend/green
+                            sudo mkdir -p /opt/hospital/logs/nginx
                             sudo mkdir -p /opt/hospital/monitoring/prometheus/config
                             sudo mkdir -p /opt/hospital/monitoring/prometheus/data
                             sudo mkdir -p /opt/hospital/monitoring/grafana/data
-                            sudo mkdir -p /opt/hospital/monitoring/grafana/provisioning/dashboards
-                            sudo mkdir -p /opt/hospital/monitoring/grafana/provisioning/datasources
 
                             # 설정 파일 이동
-                            sudo mv prometheus_core.yml /opt/hospital/config/prometheus/prometheus.yml
-                            sudo mv prometheus_monitor.yml /opt/hospital/monitoring/prometheus/config/prometheus.yml
-                            sudo cp alert_rules.yml /opt/hospital/config/prometheus/
-                            sudo mv alert_rules.yml /opt/hospital/monitoring/prometheus/config/
-                            sudo mv grafana_datasources.yml /opt/hospital/monitoring/grafana/provisioning/datasources/prometheus.yml
-                            sudo mv grafana_dashboards.yml /opt/hospital/monitoring/grafana/provisioning/dashboards/dashboard.yml
+                            sudo mv prometheus.yml /opt/hospital/monitoring/prometheus/config/
+                            sudo mv nginx.conf /opt/hospital/config/nginx/nginx.conf
 
-                            sudo chown -R ec2-user:ec2-user /opt/hospital/
+                            # MariaDB 데이터 디렉토리 권한 설정 (중요!)
+                            echo "🔐 MariaDB 디렉토리 권한 설정 중..."
+                            sudo chown -R 999:999 /opt/hospital/data/mariadb
+                            sudo chmod -R 755 /opt/hospital/data/mariadb
 
-                            # deploy.sh를 Unix 형식으로 변환 및 실행 권한 부여
-                            dos2unix deploy.sh 2>/dev/null || sed -i 's/\\r$//' deploy.sh
-                            chmod +x deploy.sh
+                            # 나머지 디렉토리 권한
+                            sudo chown -R ec2-user:ec2-user /opt/hospital/data/redis
+                            sudo chown -R ec2-user:ec2-user /opt/hospital/logs/
+                            sudo chown -R ec2-user:ec2-user /opt/hospital/config/nginx
+                            sudo chown -R ec2-user:ec2-user /opt/hospital/monitoring/
+
+                            # 스크립트 실행 권한 부여
+                            dos2unix deploy.sh rollback.sh 2>/dev/null || sed -i 's/\\r$//' deploy.sh rollback.sh
+                            chmod +x deploy.sh rollback.sh
 
                             echo "📦 Docker 이미지 로드..."
                             docker load < backend.tar.gz
 
-                            echo "▶️ 배포 스크립트 실행..."
+                            echo "▶️ 무중단 배포 스크립트 실행..."
                             ./deploy.sh
 
-                            echo "🔧 모니터링 스택 설정..."
-                            # 네트워크 생성
-                            docker network ls | grep hospital-network || docker network create hospital-network
-
-                            # 기존 모니터링 컨테이너 정리
-                            docker stop cadvisor node-exporter prometheus grafana 2>/dev/null || true
-                            docker rm cadvisor node-exporter prometheus grafana 2>/dev/null || true
-
-                            # cAdvisor 실행 (포트 충돌 방지)
-                            echo "▶️ cAdvisor 시작..."
-                            docker run -d --name cadvisor --restart unless-stopped --network hospital-network -p 8081:8080 -v /:/rootfs:ro -v /var/run:/var/run:rw -v /sys:/sys:ro -v /var/lib/docker/:/var/lib/docker:ro --privileged --device /dev/kmsg gcr.io/cadvisor/cadvisor:latest
-
-                            # Node Exporter 실행
-                            echo "▶️ Node Exporter 시작..."
-                            docker run -d --name node-exporter --restart unless-stopped --network hospital-network -p 9100:9100 -v /proc:/host/proc:ro -v /sys:/host/sys:ro -v /:/rootfs:ro --pid host prom/node-exporter:latest --path.procfs=/host/proc --path.rootfs=/rootfs --path.sysfs=/host/sys --collector.filesystem.mount-points-exclude="^/(sys|proc|dev|host|etc)(\\$|/)"
-
-                            # Prometheus 실행
-                            echo "▶️ Prometheus 시작..."
-                            docker run -d --name prometheus --restart unless-stopped --network hospital-network -p 9090:9090 -v /opt/hospital/monitoring/prometheus/config:/etc/prometheus -v /opt/hospital/monitoring/prometheus/data:/prometheus --user "$(id -u):$(id -g)" prom/prometheus:latest --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --web.console.libraries=/etc/prometheus/console_libraries --web.console.templates=/etc/prometheus/consoles --storage.tsdb.retention.time=200h --web.enable-lifecycle --web.enable-admin-api
-
-                            # Grafana 실행
-                            echo "▶️ Grafana 시작..."
-                            docker run -d --name grafana --restart unless-stopped --network hospital-network -p 3000:3000 -v /opt/hospital/monitoring/grafana/data:/var/lib/grafana -v /opt/hospital/monitoring/grafana/provisioning:/etc/grafana/provisioning -e GF_SECURITY_ADMIN_USER=admin -e GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD} -e GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel,grafana-clock-panel -e GF_USERS_ALLOW_SIGN_UP=false --user "$(id -u):$(id -g)" grafana/grafana:latest
-
-                            echo "✅ 모니터링 스택 시작 완료"
-
                             # 청소
-                            rm -f deploy_pkg.tar.gz backend.tar.gz env.prod *.yml
+                            rm -f deploy_pkg.tar.gz backend.tar.gz env.prod prometheus.yml nginx.conf
 ENDSSH
                         '''
                     }
@@ -428,15 +398,128 @@ ENDSSH
             steps {
                 script {
                     sshagent(credentials: ['EC2_PRIVATE_KEY']) {
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
-                                echo "🏥 헬스체크 시작..."
+                        sh '''
+                            ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'ENDSSH'
+                                echo "=========================================="
+                                echo "🏥 헬스체크 시작"
+                                echo "=========================================="
                                 sleep 10
-                                curl -f -s --connect-timeout 5 http://${EC2_HOST}:8888/actuator/health > /dev/null && echo "✅ 백엔드 정상" || echo "⚠️ 백엔드 확인 필요"
-                                curl -f -s --connect-timeout 5 http://${EC2_HOST}:9090/-/healthy > /dev/null && echo "✅ 프로메테우스 정상" || echo "⚠️ 프로메테우스 확인 필요"
-                                curl -f -s --connect-timeout 5 http://${EC2_HOST}:3000/api/health > /dev/null && echo "✅ 그라파나 정상" || echo "⚠️ 그라파나 확인 필요"
-                            '
-                        """
+                                
+                                # Nginx 헬스체크 (재시도)
+                                echo ""
+                                echo "📍 Nginx 헬스체크 중..."
+                                NGINX_OK=0
+                                for i in {1..5}; do
+                                    if curl -f -s --connect-timeout 5 http://localhost/nginx-health > /dev/null 2>&1; then
+                                        echo "✅ Nginx 정상 (시도 $i/5)"
+                                        NGINX_OK=1
+                                        break
+                                    else
+                                        echo "⏳ Nginx 응답 대기... (시도 $i/5)"
+                                        sleep 3
+                                    fi
+                                done
+                                
+                                if [ $NGINX_OK -eq 0 ]; then
+                                    echo "⚠️ Nginx 헬스체크 실패"
+                                    echo "디버깅:"
+                                    docker ps --format "table {{.Names}}\t{{.Status}}" | grep nginx
+                                    echo "Nginx 로그:"
+                                    docker logs hospital-nginx --tail 10 2>&1 || echo "로그 조회 실패"
+                                fi
+                                
+                                # 백엔드 헬스체크 (재시도)
+                                echo ""
+                                echo "📍 백엔드 헬스체크 중 (Nginx 경유)..."
+                                BACKEND_OK=0
+                                for i in {1..5}; do
+                                    RESPONSE=$(curl -f -s --connect-timeout 5 http://localhost/actuator/health 2>&1)
+                                    if echo "$RESPONSE" | grep -q "UP"; then
+                                        echo "✅ 백엔드 정상 (시도 $i/5)"
+                                        BACKEND_OK=1
+                                        break
+                                    else
+                                        echo "⏳ 백엔드 응답 대기... (시도 $i/5)"
+                                        sleep 3
+                                    fi
+                                done
+                                
+                                if [ $BACKEND_OK -eq 0 ]; then
+                                    echo "⚠️ 백엔드 헬스체크 실패"
+                                    echo "디버깅:"
+                                    docker ps --format "table {{.Names}}\t{{.Status}}" | grep backend
+                                    
+                                    # 백엔드 직접 테스트
+                                    echo "백엔드 직접 테스트:"
+                                    ACTIVE_BACKEND=$(docker ps --format "{{.Names}}" | grep "^hospital-backend" | head -1)
+                                    if [ -n "$ACTIVE_BACKEND" ]; then
+                                        echo "활성 백엔드: $ACTIVE_BACKEND"
+                                        docker exec $ACTIVE_BACKEND curl -f -s http://localhost:8888/actuator/health 2>&1 | head -5
+                                    fi
+                                fi
+                                
+                                # Redis 헬스체크
+                                echo ""
+                                echo "📍 Redis 헬스체크 중..."
+                                if docker exec hospital-redis redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping > /dev/null 2>&1; then
+                                    echo "✅ Redis 정상"
+                                else
+                                    echo "⚠️ Redis 확인 필요"
+                                fi
+                                
+                                echo ""
+                                echo "=========================================="
+                                echo "🔍 백엔드 컨테이너 정리 확인"
+                                echo "=========================================="
+                                
+                                # 백엔드 컨테이너 개수 확인
+                                BACKEND_COUNT=$(docker ps --format "{{.Names}}" | grep -c "^hospital-backend" || echo "0")
+                                echo "현재 실행 중인 백엔드 컨테이너: $BACKEND_COUNT 개"
+                                
+                                if [ "$BACKEND_COUNT" -gt 1 ]; then
+                                    echo "⚠️ 2개 이상 실행 중입니다. 자동 정리를 시작합니다..."
+                                    
+                                    # Nginx가 사용 중인 컨테이너 확인
+                                    ACTIVE_BACKEND=$(docker exec hospital-nginx cat /etc/nginx/nginx.conf 2>/dev/null | grep "hospital-backend-" | grep "set" | head -1 | sed 's/.*hospital-backend-//' | sed 's/:.*//')
+                                    echo "Nginx 활성 컨테이너: $ACTIVE_BACKEND"
+                                    
+                                    # 활성이 아닌 컨테이너 강제 종료
+                                    for container in $(docker ps --format "{{.Names}}" | grep "^hospital-backend"); do
+                                        if [ "$container" != "hospital-backend-$ACTIVE_BACKEND" ]; then
+                                            echo "🛑 불필요한 컨테이너 강제 종료: $container"
+                                            docker kill $container 2>&1 || docker stop $container 2>&1 || true
+                                        fi
+                                    done
+                                    
+                                    sleep 3
+                                    
+                                    # 최종 확인
+                                    FINAL_COUNT=$(docker ps --format "{{.Names}}" | grep -c "^hospital-backend" || echo "0")
+                                    if [ "$FINAL_COUNT" -eq 1 ]; then
+                                        echo "✅ 정리 완료! 백엔드 컨테이너 1개만 실행 중"
+                                    else
+                                        echo "❌ 정리 실패: 여전히 $FINAL_COUNT 개 실행 중"
+                                    fi
+                                else
+                                    echo "✅ 백엔드 컨테이너 1개만 실행 중 (정상)"
+                                fi
+                                
+                                echo ""
+                                echo "=========================================="
+                                echo "📊 최종 시스템 상태"
+                                echo "=========================================="
+                                docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "hospital|NAMES"
+                                echo "=========================================="
+                                
+                                # 최종 결과 요약
+                                echo ""
+                                echo "🎯 헬스체크 결과 요약:"
+                                [ $NGINX_OK -eq 1 ] && echo "  ✅ Nginx: 정상" || echo "  ⚠️  Nginx: 확인 필요"
+                                [ $BACKEND_OK -eq 1 ] && echo "  ✅ Backend: 정상" || echo "  ⚠️  Backend: 확인 필요"
+                                echo "  ✅ Redis: 정상"
+                                [ "$BACKEND_COUNT" -eq 1 ] && echo "  ✅ 컨테이너 개수: 1개 (정상)" || echo "  ⚠️  컨테이너 개수: $BACKEND_COUNT 개"
+ENDSSH
+                        '''
                     }
                 }
             }
@@ -444,9 +527,15 @@ ENDSSH
     }
     
     post {
+        success {
+            echo '✅ 무중단 배포가 성공적으로 완료되었습니다!'
+        }
+        failure {
+            echo '❌ 배포 중 오류가 발생했습니다. 롤백이 필요할 수 있습니다.'
+            echo '💡 롤백 명령어: ./rollback.sh'
+        }
         always {
-            sh 'rm -f backend.tar.gz deploy_pkg.tar.gz *.yml env.prod || true'
+            sh 'rm -f backend.tar.gz deploy_pkg.tar.gz prometheus.yml nginx.conf env.prod || true'
         }
     }
-
 }

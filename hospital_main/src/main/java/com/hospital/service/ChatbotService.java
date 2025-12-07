@@ -2,6 +2,7 @@ package com.hospital.service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -80,7 +81,7 @@ public class ChatbotService {
 			ChatbotResponse chatbotResponse = parseAndValidate(aiResponseText);
 
 			// 4. 타임스탬프 설정
-			chatbotResponse.setTimestamp(java.time.Instant.now().toString());
+			chatbotResponse.setTimestamp(Instant.now().toString());
 
 			log.info("✅ 챗봇 응답 완료: type={}", chatbotResponse.getType());
 			return chatbotResponse;
@@ -114,7 +115,7 @@ public class ChatbotService {
 			ChatbotResponse chatbotResponse = parseAndValidate(aiResponseText);
 
 			// 타임스탬프 설정
-			chatbotResponse.setTimestamp(java.time.Instant.now().toString());
+			chatbotResponse.setTimestamp(Instant.now().toString());
 
 			log.info("✅ 챗봇 응답 완료 (히스토리 포함): type={}", chatbotResponse.getType());
 			return chatbotResponse;
@@ -200,7 +201,7 @@ public class ChatbotService {
 		return ChatbotResponse.builder()
 				.type("error")
 				.message(errorMessage)
-				.timestamp(java.time.Instant.now().toString())
+				.timestamp(Instant.now().toString())
 				.build();
 	}
 }
