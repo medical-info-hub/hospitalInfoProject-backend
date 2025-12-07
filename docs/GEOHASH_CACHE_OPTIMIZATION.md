@@ -1,7 +1,7 @@
 # 🏥 Geohash 기반 격자 캐싱 최적화
 
-> **위치 기반 병원 검색 시스템의 캐싱 전략 개선**
-> Geohash 격자 캐싱과 Partial HIT 최적화
+> **위치 기반 병원 검색 시스템의 캐싱 전략 개선 여정**
+> Connection Pool Cold Start부터 Partial HIT 최적화까지
 
 ---
 
@@ -16,8 +16,7 @@
 7. [최종 최적화: Partial HIT 전략](#-최종-최적화-partial-hit-전략)
 8. [구현 세부사항](#-구현-세부사항)
 9. [성능 측정 결과](#-성능-측정-결과)
-10. [한계점 및 트레이드오프](#-한계점-및-트레이드오프)
-11. [결론](#-결론)
+10. [결론](#-결론)
 
 ---
 
@@ -871,408 +870,15 @@ graph LR
 
 ---
 
-## ⚖️ 한계점 및 트레이드오프
-
-### Geohash 격자 캐싱 방식의 단점
-
-#### 1. Geohash 경계 문제 (Boundary Problem)
-
-**핵심 한계**: 3×3 격자를 사용하더라도 경계 영역에서 캐시 누락이 발생할 수 있습니다.
-
-```
- 중심이 격자 B       vs       중심이 격자 C
-┌──────┬──────┬──────┐    ┌──────┬──────┬──────┐
-│  A   │  B   │  C   │    │  B   │  C   │  D   │
-├──────┼──────┼──────┤    ├──────┼──────┼──────┤
-│  D   │ [B] │  E   │    │  E   │ [C] │  F   │
-├──────┼──────┼──────┤    ├──────┼──────┼──────┤
-│  G   │  H   │  I   │    │  H   │  I   │  J   │
-└──────┴──────┴──────┘    └──────┴──────┴──────┘
-
-공통 격자: B, C, E, H, I (5개/9개 = 56%)
-→ 4개 격자 MISS 발생
-```
-
-**실제 영향**:
-- 사용자가 격자 경계를 넘어서면 캐시 적중률 감소
-- 최악의 경우 9개 중 0~2개만 HIT (78-100% MISS)
-- 격자 크기를 키우면 → 정밀도 감소
-- 격자 크기를 줄이면 → 캐시 미스율 증가
-
-**예시 시나리오**:
-```java
-// 사용자 A: 격자 wydm7 중앙
-lat: 37.5000, lng: 127.0000  // 9개 격자 캐싱
-
-// 사용자 B: 5km 북쪽 (중심 격자 완전히 변경)
-lat: 37.5450, lng: 127.0000
-// wydm7 → wydme로 변경
-// 공통 격자: 1-2개 (78-89% MISS)
-```
-
-#### 2. 과도한 데이터 캐싱 (Over-caching)
-
-**문제**: 3×3 격자 (14.7km × 14.7km)는 검색 반경 3km보다 훨씬 넓습니다.
-
-```
-검색 반경: 3km (원형)
-격자 범위: 14.7km × 14.7km (사각형)
-
-┌─────────────────────┐
-│                     │  캐싱 범위: 216km²
-│     ┌────────┐      │  실제 필요: 28km² (π × 3²)
-│     │  3km   │      │  → 670% 과잉 캐싱!
-│     └────────┘      │
-│                     │  불필요한 병원 데이터
-└─────────────────────┘  Redis 메모리 낭비
-```
-
-**실제 데이터 영향**:
-```java
-// 강남역 3km 검색
-MBR 쿼리 결과: 3,654개 병원 (14.7km × 14.7km)
-실제 3km 원형: 약 1,200개 병원
-과잉 캐싱: 약 2,454개 (67%)
-
-Redis 메모리 사용:
-- 1개 병원: 약 500 bytes (JSON 직렬화)
-- 3,654개: 약 1.8MB
-- 불필요한 데이터: 약 1.2MB (67%)
-```
-
-**스케일링 문제**:
-```
-전국 주요 도시 20곳 × 9개 격자 = 180개 격자
-각 격자당 평균 2,000개 병원
-→ 총 360,000개 병원 데이터 캐싱
-→ 약 180MB Redis 메모리 사용
-```
-
-#### 3. 캐시 무효화 문제
-
-**문제**: 병원 데이터가 변경되면 해당 병원이 속한 모든 격자를 무효화해야 합니다.
-
-```java
-// 병원 A의 주소 변경
-Hospital hospitalA = findByCode("H12345");
-hospitalA.setAddress("새 주소");
-hospitalA.setLocation(newLat, newLng);  // 좌표 변경
-
-// 문제: 어떤 격자를 무효화해야 하는가?
-```
-
-**현재 방식의 한계**:
-```java
-// TTL 방식: 1시간 후 자동 만료
-redisTemplate.opsForValue().set(
-    cacheKey,
-    hospitals,
-    1, TimeUnit.HOURS  // 최대 1시간 동안 오래된 데이터
-);
-
-// 문제점:
-// 1. 즉시 반영 안 됨 (최대 1시간 지연)
-// 2. 병원 정보 변경 시 사용자에게 잘못된 정보 제공 가능
-// 3. 실시간성 요구사항에 부적합
-```
-
-**대안의 복잡도**:
-```java
-// 대안 1: 병원 변경 시 관련 격자 전부 삭제
-@Transactional
-public void updateHospital(Hospital hospital) {
-    // 1. 병원 업데이트
-    hospitalRepository.save(hospital);
-
-    // 2. 병원이 속한 격자 계산
-    String geohash = getGeohash(hospital.getLat(), hospital.getLng());
-
-    // 3. 관련 격자 전부 삭제 (3×3 = 9개)
-    Set<String> affectedGrids = getNeighborGeohashes(...);
-    for (String grid : affectedGrids) {
-        redisTemplate.delete("hospital:geohash:" + grid);
-    }
-
-    // 문제: 병원 1개 변경 = 9개 격자 캐시 무효화
-    // → 다른 병원까지 영향 (collateral damage)
-}
-```
-
-#### 4. Redis 메모리 관리 복잡도
-
-**문제**: 격자별 TTL과 메모리 제한 간 트레이드오프
-
-```java
-// 시나리오: Redis 메모리 부족
-maxmemory 2GB (설정)
-현재 사용: 1.9GB (95%)
-
-// LRU 정책: 가장 오래된 격자 삭제
-// 문제: 인기 지역(강남)도 삭제될 수 있음
-```
-
-**TTL 딜레마**:
-```
-TTL 짧게 (10분):
-  장점: 메모리 절약, 데이터 신선도 ↑
-  단점: 캐시 미스율 ↑, DB 부하 ↑
-
-TTL 길게 (6시간):
-  장점: 캐시 적중률 ↑, DB 부하 ↓
-  단점: 메모리 사용 ↑, 오래된 데이터 위험 ↑
-```
-
-#### 5. Precision 선택의 딜레마
-
-**현재**: Precision 5 (4.9km × 4.9km)
-
-| Precision | 격자 크기 | 장점 | 단점 |
-|-----------|----------|------|------|
-| 4 | 19.5km × 19.5km | 적은 격자 수 (적은 메모리) | 너무 넓음 (과잉 캐싱) |
-| **5** | **4.9km × 4.9km** | **적절한 균형** | **경계 문제 여전히 존재** |
-| 6 | 1.2km × 1.2km | 정밀함 | 격자 수 ↑ (9×4=36개 필요) |
-| 7 | 150m × 150m | 매우 정밀 | 격자 수 ↑↑ (9×16=144개 필요) |
-
-**Precision 6으로 변경 시**:
-```
-검색 반경: 3km
-격자 크기: 1.2km × 1.2km
-
-→ 5×5 = 25개 격자 필요
-→ Redis MGET 25개 (현재 9개의 2.8배)
-→ 백그라운드 캐싱 25개 (현재의 2.8배 리소스)
-→ 메모리 사용 2.8배 증가
-```
-
-### 대안 및 선택 기준
-
-#### 대안 1: 단순 좌표 기반 캐싱 (Round-robin)
-
-**장점**:
-```java
-// 소수점 2자리 반올림
-String cacheKey = String.format("%.2f:%.2f", lat, lng);
-// 예: "37.50:127.03"
-```
-- 구현 단순
-- Geohash 라이브러리 불필요
-- 빠른 캐시 키 생성
-
-**언제 사용해야 하는가**:
-- 정밀도 요구사항이 낮은 경우
-- 캐시 적중률보다 구현 속도 우선
-- 소규모 서비스 (사용자 수 < 1,000)
-
-**단점**:
-- 경계 문제 심각 (인접 사용자 간 캐시 공유 불가)
-- 캐시 미스율 높음
-- 확장성 부족
-
-#### 대안 2: LRU 캐시 (Caffeine, Guava Cache)
-
-**장점**:
-```java
-Cache<String, List<Hospital>> cache = Caffeine.newBuilder()
-    .maximumSize(10_000)
-    .expireAfterWrite(1, TimeUnit.HOURS)
-    .build();
-
-String key = String.format("%.4f:%.4f", lat, lng);
-List<Hospital> hospitals = cache.get(key, k -> fetchFromDB(lat, lng));
-```
-- 로컬 메모리 (Redis 불필요)
-- 자동 LRU 정책
-- 복잡도 낮음
-
-**언제 사용해야 하는가**:
-- 단일 서버 환경
-- 분산 캐시 불필요
-- Redis 운영 부담 회피
-
-**단점**:
-- 서버 재시작 시 캐시 손실
-- 다중 서버 환경에서 캐시 공유 불가
-- 메모리 제한 (Heap Size)
-
-#### 대안 3: Redis Geo Commands
-
-**장점**:
-```redis
-GEOADD hospitals:locations 127.0276 37.4979 "hospital:H12345"
-GEORADIUS hospitals:locations 127.0276 37.4979 3 km WITHDIST
-```
-- 정확한 원형 검색
-- Redis 내장 기능
-- Geohash 경계 문제 없음
-
-**언제 사용해야 하는가**:
-- 정확한 거리 계산 필수
-- 실시간 위치 업데이트 필요 (배달, 택시 등)
-- 복잡한 공간 쿼리 (근접 검색, 정렬 등)
-
-**단점**:
-- 병원 단위 저장 → 메모리 사용 증가
-- GEORADIUS 계산 비용 (3,000개 병원 = 10-20ms)
-- 병원 정보 변경 시 개별 업데이트 필요
-
-### 선택 기준 테이블
-
-| 조건 | 권장 방식 | 이유 |
-|------|----------|------|
-| **분산 서버 환경** | Geohash 격자 캐싱 (현재 방식) | 서버 간 캐시 공유 필요 |
-| **단일 서버** | LRU 캐시 (Caffeine) | Redis 운영 부담 없음 |
-| **정확한 거리 계산** | Redis Geo | 원형 검색 지원 |
-| **실시간 업데이트** | Redis Geo | 병원 단위 무효화 가능 |
-| **메모리 제약** | Precision 4-5 + 짧은 TTL | 격자 수/크기 최소화 |
-| **캐시 적중률 우선** | Precision 5-6 + 긴 TTL | 더 많은 격자, 긴 TTL |
-
-### 현재 선택의 정당성
-
-이 프로젝트에서 **Geohash Precision 5 + 3×3 격자 + Partial HIT**를 선택한 이유:
-
-#### 조건 1: 분산 캐시 필요
-```
-배포 환경: Docker Compose (복수 컨테이너 가능)
-요구사항: 서버 간 캐시 공유
-결정: Redis 기반 분산 캐시
-```
-
-#### 조건 2: 캐시 공유 극대화
-```
-사용 패턴: 동일 지역(강남, 홍대 등) 반복 검색
-전략: Geohash 격자화로 인접 사용자 간 공유
-효과: 67% 캐시 재사용 (인접 격자)
-```
-
-#### 조건 3: 리소스 효율
-```
-문제: All-or-Nothing 시 67% 중복 캐싱
-해결: Partial HIT (MISS만 캐싱)
-효과: 백그라운드 작업 50-70% 감소
-```
-
-#### 조건 4: 데이터 실시간성 vs 성능
-```
-병원 데이터: 하루 1-2회 변경 (주소, 전화번호 등)
-선택: TTL 1시간 (실시간성 희생)
-효과: 캐시 적중률 극대화
-트레이드오프: 최대 1시간 지연 허용
-```
-
-### 만약 다음 조건이었다면 다른 선택
-
-#### 시나리오 1: 실시간 배달 서비스
-```
-조건: 음식점 위치 실시간 변경, 정확한 거리 필수
-문제: Geohash 경계 문제, TTL 지연
-선택: Redis Geo Commands
-이유: GEORADIUS로 정확한 원형 검색 + 즉시 업데이트
-```
-
-#### 시나리오 2: 단일 서버 + 소규모
-```
-조건: 서버 1대, 사용자 < 1,000명
-문제: Redis 운영 오버헤드
-선택: Caffeine LRU Cache
-이유: 로컬 메모리만으로 충분, 운영 단순화
-```
-
-#### 시나리오 3: 초고속 응답 필요
-```
-조건: 응답 시간 < 10ms
-문제: Redis 조회 20-30ms
-선택: In-Memory Cache (Caffeine) + Redis 이중화
-이유: L1 캐시(로컬) → L2 캐시(Redis) → DB
-```
-
-### 프로덕션 환경에서 고려할 점
-
-#### 1. 캐시 무효화 전략
-
-```java
-// 병원 정보 변경 이벤트 발행
-@Transactional
-public void updateHospital(Hospital hospital) {
-    hospitalRepository.save(hospital);
-
-    // 이벤트 발행
-    eventPublisher.publishEvent(new HospitalUpdatedEvent(hospital));
-}
-
-// 이벤트 리스너: 관련 격자 무효화
-@EventListener
-public void onHospitalUpdated(HospitalUpdatedEvent event) {
-    Hospital hospital = event.getHospital();
-    String geohash = getGeohash(hospital.getLat(), hospital.getLng());
-    Set<String> affectedGrids = getNeighborGeohashes(...);
-
-    // 관련 격자만 선택적 무효화
-    for (String grid : affectedGrids) {
-        redisTemplate.delete("hospital:geohash:" + grid);
-    }
-
-    log.info("캐시 무효화: {}개 격자", affectedGrids.size());
-}
-```
-
-#### 2. Redis 메모리 모니터링
-
-```java
-@Scheduled(cron = "0 */10 * * * *")  // 10분마다
-public void monitorRedisMemory() {
-    Properties info = redisTemplate.getConnectionFactory()
-        .getConnection()
-        .info("memory");
-
-    String usedMemory = info.getProperty("used_memory_human");
-    String maxMemory = info.getProperty("maxmemory_human");
-
-    log.info("Redis 메모리: {} / {}", usedMemory, maxMemory);
-
-    // 90% 초과 시 알림
-    if (calculateUsagePercentage(info) > 90) {
-        alertService.sendAlert("Redis 메모리 부족: " + usedMemory);
-    }
-}
-```
-
-#### 3. 캐시 Warm-up 자동화
-
-```java
-@EventListener(ApplicationReadyEvent.class)
-public void warmUpCache() {
-    log.info("캐시 Warm-up 시작");
-
-    List<PopularLocation> locations = Arrays.asList(
-        new PopularLocation("강남역", 37.4979, 127.0276),
-        new PopularLocation("홍대입구", 37.5563, 126.9236),
-        new PopularLocation("잠실역", 37.5133, 127.1000)
-    );
-
-    for (PopularLocation loc : locations) {
-        try {
-            hospitalWebService.getOptimizedHospitalsV2(
-                loc.getLat(), loc.getLng(), 3.0
-            );
-            log.info("Warm-up 완료: {}", loc.getName());
-        } catch (Exception e) {
-            log.error("Warm-up 실패: {}", loc.getName(), e);
-        }
-    }
-}
-```
-
----
-
-## 📊 결론
+## 🎉 결론
 
 ### 달성한 목표
 
 | 목표 | 결과 | 달성 |
 |------|------|------|
-| 캐시 HIT 시 100ms 이내 | 29-124ms | 완료 |
-| 높은 캐시 적중률 | 격자 겹침으로 재사용 | 완료 |
-| 백그라운드 작업 최소화 | 50-70% 감소 | 완료 |
+| 캐시 HIT 시 100ms 이내 | **29-124ms** | ✅ |
+| 높은 캐시 적중률 | 격자 겹침으로 예상 외 재사용 | ✅ |
+| 백그라운드 작업 최소화 | **50-70% 감소** | ✅ |
 
 ### 최적화 효과 요약
 
@@ -1340,13 +946,13 @@ graph TD
 
 ### 기술적 의의
 
-이 최적화 과정에서 학습한 주요 개념:
+이 최적화 과정은 단순히 성능을 개선한 것을 넘어, **문제의 본질을 이해하고 점진적으로 개선하는 엔지니어링 사고**를 보여줍니다:
 
 1. **문제의 근본 원인 파악**: 좌표 기반 캐싱의 한계
 2. **적절한 해결책 선택**: Geohash 격자화
 3. **점진적 개선**: All-or-Nothing → Partial HIT
 4. **데이터 기반 검증**: 실제 로그로 성능 측정
-5. **트레이드오프 이해**: 캐시 적중률 vs 메모리 사용, 정밀도 vs 격자 수
+5. **예상치 못한 발견**: 격자 겹침 효과
 
 ### 향후 개선 가능성
 
@@ -1410,8 +1016,7 @@ if (isPopularLocation(lat, lng)) {
 |------|------|
 | **작성일** | 2025-12-05 |
 | **작성자** | Hospital Info Project Team |
-| **버전** | 2.0 |
+| **버전** | 1.0 |
 | **라이센스** | MIT |
-| **변경 이력** | v2.0 - 한계점 및 트레이드오프 섹션 추가, 객관적 표현으로 수정 |
 
 ---

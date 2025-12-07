@@ -85,7 +85,7 @@ MariaDB 10.11
 ```
 Apache Tomcat 10.1
 Docker Container
-Ubuntu Linux 24 (AWS EC2)
+Amazon Linux 2 (AWS EC2)
 ```
 
 ### External APIs
@@ -224,7 +224,7 @@ WebSocket 연결 → EmergencyLiveService → TaskScheduler (3분 주기)
 
 1. **저장소 클론**
 ```bash
-git clone [https://github.com/your-username/hospitalInfoProject-backend.git](https://github.com/medical-info-hub/hospitalInfoProject-backend.git)
+git clone https://github.com/your-username/hospitalInfoProject-backend.git(https://github.com/medical-info-hub/hospitalInfoProject-backend.git)
 cd hospitalInfoProject-backend
 ```
 
@@ -632,9 +632,10 @@ mvn jacoco:report
 
 ## 🙏 감사의 말
 
-- [공공데이터포털](https://www.data.go.kr/) - 의료 데이터 제공
-- [Spring Framework](https://spring.io/) - 강력한 백엔드 프레임워크
-- [MariaDB Foundation](https://mariadb.org/) - 안정적인 데이터베이스
-- [PostGIS](https://postgis.net/) - 공간 데이터 처리
+이 프로젝트가 가능하도록 도움을 준 기관과 기술에 감사드립니다:
 
----
+- 📊 [공공데이터포털](https://www.data.go.kr/) - 의료 데이터 제공
+- 🌱 [Spring Framework](https://spring.io/) - 안정적이고 강력한 백엔드 프레임워크
+- 🐬 [MariaDB Foundation](https://mariadb.org/) - 데이터베이스 지원
+- 🗺 [PostGIS](https://postgis.net/) - 공간 데이터 처리
+
