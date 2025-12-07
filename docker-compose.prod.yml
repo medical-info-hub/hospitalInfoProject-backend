@@ -10,6 +10,7 @@ services:
   mariadb:
     image: mariadb:10.11
     container_name: hospital-mariadb
+    user: "999:999"  # MariaDB 기본 UID:GID 명시
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-1234}
       MYSQL_DATABASE: hospital_api_db
@@ -17,16 +18,21 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD:-1234}
       MYSQL_CHARSET: utf8mb4
       MYSQL_COLLATION: utf8mb4_unicode_ci
+      MYSQL_TCP_PORT: 3500
     ports:
-      - "${DB_PORT:-3500}:3500"
+      - "3500:3500"
     volumes:
       - /opt/hospital/data/mariadb:/var/lib/mysql
-    command: --port=3500 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    command: 
+      - --port=3500
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --bind-address=0.0.0.0
     restart: unless-stopped
     networks:
       - hospital-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-1234}"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       timeout: 5s
       retries: 10
       interval: 10s

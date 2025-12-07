@@ -364,7 +364,16 @@ http {
                             sudo mv prometheus.yml /opt/hospital/monitoring/prometheus/config/
                             sudo mv nginx.conf /opt/hospital/config/nginx/nginx.conf
 
-                            sudo chown -R ec2-user:ec2-user /opt/hospital/
+                            # MariaDB 데이터 디렉토리 권한 설정 (중요!)
+                            echo "🔐 MariaDB 디렉토리 권한 설정 중..."
+                            sudo chown -R 999:999 /opt/hospital/data/mariadb
+                            sudo chmod -R 755 /opt/hospital/data/mariadb
+
+                            # 나머지 디렉토리 권한
+                            sudo chown -R ec2-user:ec2-user /opt/hospital/data/redis
+                            sudo chown -R ec2-user:ec2-user /opt/hospital/logs/
+                            sudo chown -R ec2-user:ec2-user /opt/hospital/config/nginx
+                            sudo chown -R ec2-user:ec2-user /opt/hospital/monitoring/
 
                             # 스크립트 실행 권한 부여
                             dos2unix deploy.sh rollback.sh 2>/dev/null || sed -i 's/\\r$//' deploy.sh rollback.sh
@@ -402,6 +411,15 @@ ENDSSH
                                 
                                 # Redis 헬스체크
                                 docker exec hospital-redis redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping > /dev/null 2>&1 && echo "✅ Redis 정상" || echo "⚠️ Redis 확인 필요"
+                                
+                                # 백엔드 컨테이너 개수 확인
+                                BACKEND_COUNT=\$(docker ps | grep -c hospital-backend || echo "0")
+                                if [ "\$BACKEND_COUNT" -eq 1 ]; then
+                                    echo "✅ 백엔드 컨테이너 1개만 실행 중 (정상)"
+                                else
+                                    echo "⚠️ 경고: 백엔드 컨테이너 \$BACKEND_COUNT 개 실행 중"
+                                    docker ps | grep hospital-backend
+                                fi
                             '
                         """
                     }

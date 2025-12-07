@@ -199,6 +199,23 @@ sleep 30
 echo "⏹️ ${ACTIVE_CONTAINER} 컨테이너 중지..."
 docker-compose -f $COMPOSE_FILE stop backend-${ACTIVE_CONTAINER}
 
+# 중지 확인 및 강제 중지
+sleep 3
+if docker ps | grep -q "hospital-backend-${ACTIVE_CONTAINER}"; then
+    echo -e "${YELLOW}⚠️ 컨테이너가 여전히 실행 중입니다. 강제 중지 시도...${NC}"
+    docker stop hospital-backend-${ACTIVE_CONTAINER} || true
+    sleep 2
+fi
+
+# 최종 확인
+RUNNING_COUNT=$(docker ps | grep -c hospital-backend || echo "0")
+if [ "$RUNNING_COUNT" -gt 1 ]; then
+    echo -e "${RED}⚠️ 경고: 백엔드 컨테이너가 ${RUNNING_COUNT}개 실행 중입니다!${NC}"
+    echo -e "${YELLOW}수동으로 확인이 필요합니다: docker ps | grep hospital-backend${NC}"
+else
+    echo -e "${GREEN}✅ 백엔드 컨테이너 1개만 실행 중 (정상)${NC}"
+fi
+
 echo ""
 echo "=========================================="
 echo -e "${GREEN}✅ 롤백 완료!${NC}"
@@ -207,5 +224,5 @@ echo -e "${BLUE}활성 컨테이너: ${ROLLBACK_CONTAINER}${NC}"
 echo -e "${BLUE}중지된 컨테이너: ${ACTIVE_CONTAINER}${NC}"
 echo ""
 echo "💡 문제를 해결한 후 다시 배포하세요:"
-echo "  ./deploy-zero-downtime.sh"
+echo "  ./deploy.sh"
 echo "=========================================="
