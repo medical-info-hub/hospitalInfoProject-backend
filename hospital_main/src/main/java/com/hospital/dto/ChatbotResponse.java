@@ -42,6 +42,13 @@ public class ChatbotResponse {
     private List<String> departments;
 
     /**
+     * 강조 메시지 (suggest 타입 전용)
+     * 진료과 추천 부분을 강조하기 위한 메시지
+     */
+    @JsonProperty("highlightMessage")
+    private String highlightMessage;
+
+    /**
      * 응답 타입 확인 메서드
      */
     public boolean isQuestion() {

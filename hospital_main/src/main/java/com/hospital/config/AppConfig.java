@@ -27,6 +27,7 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 @PropertySource("classpath:db.properties")
 @PropertySource("classpath:region.properties")
 @PropertySource("classpath:subject.properties")
+@PropertySource("classpath:redis.properties")
 @EnableTransactionManagement
 @EnableJpaRepositories(basePackages = "com.hospital.repository")
 @EnableWebMvc
@@ -38,9 +39,10 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
     WebConfig.class,          // 웹 및 HTTP 설정
     AsyncConfig.class,        // 비동기 및 스케줄링 설정
     WebSocketConfig.class,    // WebSocket 설정
-    JacksonConfig.class, 
+    JacksonConfig.class,
     CacheConfig.class,
-    RestTemplateConfig.class
+    RestTemplateConfig.class,
+    RedisConfig.class         // Redis 설정
 })
 public class AppConfig {
 

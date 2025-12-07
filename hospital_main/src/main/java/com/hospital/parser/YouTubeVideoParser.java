@@ -1,5 +1,6 @@
 package com.hospital.parser;
 
+import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -115,7 +116,7 @@ public class YouTubeVideoParser {
      * YouTube API 날짜 형식을 LocalDateTime으로 변환
      * "2023-09-12T14:03:19Z" -> LocalDateTime
      */
-    private java.time.LocalDateTime parsePublishedAt(String publishedAt) {
+    private LocalDateTime parsePublishedAt(String publishedAt) {
         if (publishedAt == null || publishedAt.isEmpty()) {
             return null;
         }

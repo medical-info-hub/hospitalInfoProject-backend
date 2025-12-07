@@ -26,6 +26,26 @@ services:
       interval: 10s
       start_period: 30s
 
+  # Redis 캐시
+  redis:
+    image: redis:7-alpine
+    container_name: hospital-redis
+    # ports 제거 - 외부 노출 방지! 같은 네트워크 내에서만 접근 가능
+    expose:
+      - "6379"  # 컨테이너 간 통신용
+    volumes:
+      - /opt/hospital/data/redis:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-}
+    restart: unless-stopped
+    networks:
+      - hospital-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-}", "ping"]
+      timeout: 3s
+      retries: 5
+      interval: 10s
+      start_period: 10s
+
   # Spring 백엔드
   backend:
     image: hospital-backend:${IMAGE_TAG:-latest}
@@ -36,6 +56,9 @@ services:
       - DB_URL=${DB_URL}
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_PROFILES_ACTIVE=${ENVIRONMENT:-production}
 
@@ -77,6 +100,8 @@ services:
       - /opt/hospital/logs/backend:/app/logs
     depends_on:
       mariadb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     networks:

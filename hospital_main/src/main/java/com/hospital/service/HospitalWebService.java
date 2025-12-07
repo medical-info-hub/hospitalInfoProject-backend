@@ -1,6 +1,10 @@
 package com.hospital.service;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,21 +29,69 @@ public class HospitalWebService {
 
 	private final HospitalJdbcRepository hospitalJdbcRepository;
 	private final DistanceCalculator distanceCalculator;
+	private final GeohashCacheService geohashCacheService;
 
 	private static final double KM_PER_DEGREE_LAT = 110.0;
 
 	@Autowired
-	public HospitalWebService(HospitalJdbcRepository hospitalJdbcRepository, DistanceCalculator distanceCalculator) {
+	public HospitalWebService(
+		HospitalJdbcRepository hospitalJdbcRepository,
+		DistanceCalculator distanceCalculator,
+		GeohashCacheService geohashCacheService) {
 
 		this.hospitalJdbcRepository = hospitalJdbcRepository;
 		this.distanceCalculator = distanceCalculator;
+		this.geohashCacheService = geohashCacheService;
 	}
 
+	/**
+	 * 병원 검색 V2 - 캐시 우선 최적화 버전
+	 * 1. 캐시 우선 조회 시도 -> 모든 격자 HIT시 즉시 반환 (빠름)
+	 * 2. 하나라도 MISS시 MBR DB 조회 + 백그라운드 캐싱 (정확함)
+	 */
 	public List<HospitalWebResponse> getOptimizedHospitalsV2(double userLat, double userLng, double radius) {
-		long startTime = System.currentTimeMillis();
-		log.info("=== JDBC Optimized Query ===");
+		long totalStartTime = System.currentTimeMillis();
+		log.info("=== 병원 검색 시작 (위치: {}, {}, 반경: {}km) ===", userLat, userLng, radius);
 
-		// MBR 계산
+		// 1. 캐시 우선 조회 시도
+		long cacheStartTime = System.currentTimeMillis();
+		List<HospitalWebResponse> cachedResult = geohashCacheService.getFromCacheIfAllHit(userLat, userLng);
+		long cacheTime = System.currentTimeMillis() - cacheStartTime;
+
+		if (cachedResult != null) {
+			// 캐시 완전 HIT - MBR 필터링 후 즉시 반환
+			long filterStartTime = System.currentTimeMillis();
+			double deltaDegreeY = radius / KM_PER_DEGREE_LAT;
+			double kmPerDegreeLon = 111.32 * Math.cos(Math.toRadians(userLat));
+			double deltaDegreeX = radius / kmPerDegreeLon;
+
+			double minLon = userLng - deltaDegreeX;
+			double maxLon = userLng + deltaDegreeX;
+			double minLat = userLat - deltaDegreeY;
+			double maxLat = userLat + deltaDegreeY;
+
+			// 중복 제거
+			Map<String, HospitalWebResponse> uniqueHospitals = new HashMap<>();
+			cachedResult.forEach(h -> uniqueHospitals.put(h.getHospitalCode(), h));
+
+			// MBR 필터링
+			List<HospitalWebResponse> result = uniqueHospitals.values().stream()
+				.filter(h -> h.getCoordinateX() >= minLon && h.getCoordinateX() <= maxLon
+						  && h.getCoordinateY() >= minLat && h.getCoordinateY() <= maxLat)
+				.collect(Collectors.toList());
+
+			long filterTime = System.currentTimeMillis() - filterStartTime;
+			long totalTime = System.currentTimeMillis() - totalStartTime;
+
+			log.info("⏱️ 캐시 HIT 경로: 캐시 조회 {}ms | MBR 필터링 {}ms | 총 {}ms",
+				cacheTime, filterTime, totalTime);
+			log.info("최종 출력: {}개 (캐시에서 반환)", result.size());
+
+			return result;
+		}
+
+		// 2. 캐시 MISS - MBR DB 조회
+		long mbrStartTime = System.currentTimeMillis();
 		double deltaDegreeY = radius / KM_PER_DEGREE_LAT;
 		double kmPerDegreeLon = 111.32 * Math.cos(Math.toRadians(userLat));
 		double deltaDegreeX = radius / kmPerDegreeLon;
@@ -48,15 +100,30 @@ public class HospitalWebService {
 		double maxLon = userLng + deltaDegreeX;
 		double minLat = userLat - deltaDegreeY;
 		double maxLat = userLat + deltaDegreeY;
+		long mbrTime = System.currentTimeMillis() - mbrStartTime;
 
-		// JDBC로 조회
-		List<HospitalWebResponse> result = hospitalJdbcRepository.findByMBRDirect(minLon, maxLon, minLat, maxLat);
+		long dbStartTime = System.currentTimeMillis();
+		List<HospitalWebResponse> hospitals = hospitalJdbcRepository.findByMBRDirect(
+			minLon, maxLon, minLat, maxLat
+		);
+		long dbTime = System.currentTimeMillis() - dbStartTime;
 
-		log.info("Total elapsed: {}ms", System.currentTimeMillis() - startTime);
-		return result;
+		log.info("캐시 MISS - MBR 직접 조회 완료: {}개", hospitals.size());
+
+		// 3. 백그라운드에서 격자별 캐싱
+		geohashCacheService.cacheHospitalsByGridAsync(hospitals, userLat, userLng);
+
+		long totalTime = System.currentTimeMillis() - totalStartTime;
+
+		log.info("⏱️ 캐시 MISS 경로: 캐시 조회 {}ms | MBR 계산 {}ms | DB 조회 {}ms | 총 {}ms (격자 캐싱은 백그라운드 진행 중)",
+			cacheTime, mbrTime, dbTime, totalTime);
+		log.info("최종 출력: {}개", hospitals.size());
+
+		return hospitals;
 	}
 
-	// 진료과 필터링 + limit 적용 버전
+
+	// 진료과 필터링 + limit 적용 버전 (챗봇용 - 캐싱 없음)
 	public List<HospitalWebResponse> getOptimizedHospitalsV2(
 			double userLat,
 			double userLng,
@@ -65,9 +132,9 @@ public class HospitalWebService {
 			Integer limit) {
 
 		long startTime = System.currentTimeMillis();
-		log.info("=== Hospital Search (departments: {}, limit: {}) ===", departments, limit);
+		log.info("=== 챗봇 병원 검색 (진료과: {}, limit: {}) ===", departments, limit);
 
-		// 1. MBR 계산 및 조회
+		// 1. MBR 계산 및 DB 직접 조회
 		double deltaDegreeY = radius / KM_PER_DEGREE_LAT;
 		double kmPerDegreeLon = 111.32 * Math.cos(Math.toRadians(userLat));
 		double deltaDegreeX = radius / kmPerDegreeLon;
@@ -96,8 +163,7 @@ public class HospitalWebService {
 		// 4. limit 적용
 		hospitals = applyLimit(hospitals, limit);
 
-
-		log.info("Total elapsed: {}ms", System.currentTimeMillis() - startTime);
+		log.info("총 소요시간: {}ms", System.currentTimeMillis() - startTime);
 		return hospitals;
 	}
 
