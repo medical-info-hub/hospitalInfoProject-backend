@@ -197,24 +197,46 @@ sleep 30
 
 # 문제가 있던 컨테이너 중지
 echo "⏹️ ${ACTIVE_CONTAINER} 컨테이너 중지..."
-docker-compose -f $COMPOSE_FILE stop backend-${ACTIVE_CONTAINER}
+echo "단계 1: docker-compose stop 시도..."
+docker-compose -f $COMPOSE_FILE stop backend-${ACTIVE_CONTAINER} 2>&1 || echo "docker-compose stop 실패, 계속 진행..."
+
+# 3초 대기
+sleep 3
 
 # 중지 확인 및 강제 중지
-sleep 3
-if docker ps | grep -q "hospital-backend-${ACTIVE_CONTAINER}"; then
+if docker ps --format '{{.Names}}' | grep -q "^hospital-backend-${ACTIVE_CONTAINER}$"; then
     echo -e "${YELLOW}⚠️ 컨테이너가 여전히 실행 중입니다. 강제 중지 시도...${NC}"
-    docker stop hospital-backend-${ACTIVE_CONTAINER} || true
+    echo "단계 2: docker stop 시도..."
+    docker stop hospital-backend-${ACTIVE_CONTAINER} 2>&1 || echo "docker stop 실패, 계속 진행..."
+    sleep 3
+fi
+
+# 최종 재확인
+if docker ps --format '{{.Names}}' | grep -q "^hospital-backend-${ACTIVE_CONTAINER}$"; then
+    echo -e "${RED}⚠️ 여전히 실행 중입니다. 최종 강제 중지 시도...${NC}"
+    echo "단계 3: docker kill 시도..."
+    docker kill hospital-backend-${ACTIVE_CONTAINER} 2>&1 || echo "docker kill 실패"
     sleep 2
 fi
 
-# 최종 확인
-RUNNING_COUNT=$(docker ps | grep -c hospital-backend || echo "0")
-if [ "$RUNNING_COUNT" -gt 1 ]; then
-    echo -e "${RED}⚠️ 경고: 백엔드 컨테이너가 ${RUNNING_COUNT}개 실행 중입니다!${NC}"
-    echo -e "${YELLOW}수동으로 확인이 필요합니다: docker ps | grep hospital-backend${NC}"
-else
+# 최종 상태 확인
+RUNNING_COUNT=$(docker ps --format '{{.Names}}' | grep -c "^hospital-backend" || echo "0")
+echo ""
+echo "=========================================="
+if [ "$RUNNING_COUNT" -eq 1 ]; then
     echo -e "${GREEN}✅ 백엔드 컨테이너 1개만 실행 중 (정상)${NC}"
+    docker ps --format "table {{.Names}}\t{{.Status}}" | grep hospital-backend
+elif [ "$RUNNING_COUNT" -gt 1 ]; then
+    echo -e "${RED}⚠️ 경고: 백엔드 컨테이너가 ${RUNNING_COUNT}개 실행 중입니다!${NC}"
+    docker ps --format "table {{.Names}}\t{{.Status}}" | grep hospital-backend
+    echo ""
+    echo -e "${YELLOW}💡 수동으로 중지해주세요:${NC}"
+    echo "   docker stop hospital-backend-${ACTIVE_CONTAINER}"
+else
+    echo -e "${RED}⚠️ 실행 중인 백엔드 컨테이너가 없습니다!${NC}"
 fi
+echo "=========================================="
+echo ""
 
 echo ""
 echo "=========================================="

@@ -253,24 +253,46 @@ sleep 30
 
 # 이전 컨테이너 중지
 echo "⏹️ 이전 컨테이너(${ACTIVE_CONTAINER}) 중지..."
-docker-compose -f $COMPOSE_FILE stop backend-${ACTIVE_CONTAINER}
+echo "단계 1: docker-compose stop 시도..."
+docker-compose -f $COMPOSE_FILE stop backend-${ACTIVE_CONTAINER} 2>&1 || echo "docker-compose stop 실패, 계속 진행..."
+
+# 3초 대기
+sleep 3
 
 # 중지 확인 및 강제 중지
-sleep 3
-if docker ps | grep -q "hospital-backend-${ACTIVE_CONTAINER}"; then
+if docker ps --format '{{.Names}}' | grep -q "^hospital-backend-${ACTIVE_CONTAINER}$"; then
     echo -e "${YELLOW}⚠️ 컨테이너가 여전히 실행 중입니다. 강제 중지 시도...${NC}"
-    docker stop hospital-backend-${ACTIVE_CONTAINER} || true
+    echo "단계 2: docker stop 시도..."
+    docker stop hospital-backend-${ACTIVE_CONTAINER} 2>&1 || echo "docker stop 실패, 계속 진행..."
+    sleep 3
+fi
+
+# 최종 재확인
+if docker ps --format '{{.Names}}' | grep -q "^hospital-backend-${ACTIVE_CONTAINER}$"; then
+    echo -e "${RED}⚠️ 여전히 실행 중입니다. 최종 강제 중지 시도...${NC}"
+    echo "단계 3: docker kill 시도..."
+    docker kill hospital-backend-${ACTIVE_CONTAINER} 2>&1 || echo "docker kill 실패"
     sleep 2
 fi
 
-# 최종 확인
-RUNNING_COUNT=$(docker ps | grep -c hospital-backend || echo "0")
-if [ "$RUNNING_COUNT" -gt 1 ]; then
-    echo -e "${RED}⚠️ 경고: 백엔드 컨테이너가 ${RUNNING_COUNT}개 실행 중입니다!${NC}"
-    echo -e "${YELLOW}수동으로 확인이 필요합니다: docker ps | grep hospital-backend${NC}"
-else
+# 최종 상태 확인
+RUNNING_COUNT=$(docker ps --format '{{.Names}}' | grep -c "^hospital-backend" || echo "0")
+echo ""
+echo "=========================================="
+if [ "$RUNNING_COUNT" -eq 1 ]; then
     echo -e "${GREEN}✅ 백엔드 컨테이너 1개만 실행 중 (정상)${NC}"
+    docker ps --format "table {{.Names}}\t{{.Status}}" | grep hospital-backend
+elif [ "$RUNNING_COUNT" -gt 1 ]; then
+    echo -e "${RED}⚠️ 경고: 백엔드 컨테이너가 ${RUNNING_COUNT}개 실행 중입니다!${NC}"
+    docker ps --format "table {{.Names}}\t{{.Status}}" | grep hospital-backend
+    echo ""
+    echo -e "${YELLOW}💡 수동으로 중지해주세요:${NC}"
+    echo "   docker stop hospital-backend-${ACTIVE_CONTAINER}"
+else
+    echo -e "${RED}⚠️ 실행 중인 백엔드 컨테이너가 없습니다!${NC}"
 fi
+echo "=========================================="
+echo ""
 
 # 시스템 정리
 echo "🧹 사용하지 않는 Docker 리소스 정리..."
@@ -279,12 +301,45 @@ docker system prune -f
 # 배포 완료 정보 출력
 PUBLIC_IP=$(curl -s --connect-timeout 5 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "localhost")
 
+# 최종 상태 재확인 및 자동 정리
+echo ""
+echo "🔍 최종 상태 확인 중..."
+FINAL_RUNNING=$(docker ps --format '{{.Names}}' | grep "^hospital-backend" || echo "")
+FINAL_COUNT=$(echo "$FINAL_RUNNING" | grep -c "hospital-backend" || echo "0")
+
+if [ "$FINAL_COUNT" -gt 1 ]; then
+    echo -e "${RED}⚠️ 백엔드 컨테이너가 여전히 ${FINAL_COUNT}개 실행 중입니다. 자동 정리 시도...${NC}"
+    
+    # TARGET_CONTAINER가 아닌 모든 백엔드 컨테이너 중지
+    for container in $(docker ps --format '{{.Names}}' | grep "^hospital-backend"); do
+        if [ "$container" != "hospital-backend-${TARGET_CONTAINER}" ]; then
+            echo "불필요한 컨테이너 중지: $container"
+            docker stop $container 2>&1 || true
+        fi
+    done
+    
+    sleep 3
+    FINAL_COUNT=$(docker ps --format '{{.Names}}' | grep -c "^hospital-backend" || echo "0")
+fi
+
 echo ""
 echo "=========================================="
 echo -e "${GREEN}🎉 무중단 배포 완료!${NC}"
 echo "=========================================="
 echo -e "${BLUE}활성 컨테이너: ${TARGET_CONTAINER}${NC}"
 echo -e "${BLUE}대기 컨테이너: ${ACTIVE_CONTAINER} (중지됨)${NC}"
+
+# 최종 컨테이너 상태 출력
+echo ""
+echo "📊 현재 백엔드 컨테이너 상태:"
+docker ps -a --format "table {{.Names}}\t{{.Status}}" | grep hospital-backend
+
+if [ "$FINAL_COUNT" -eq 1 ]; then
+    echo -e "${GREEN}✅ 백엔드 컨테이너 1개만 실행 중 (정상)${NC}"
+elif [ "$FINAL_COUNT" -gt 1 ]; then
+    echo -e "${RED}⚠️ 백엔드 컨테이너 ${FINAL_COUNT}개 실행 중 - 수동 확인 필요${NC}"
+fi
+
 echo ""
 echo "📍 접속 정보:"
 echo "  🔗 API (Nginx): http://${PUBLIC_IP}"
