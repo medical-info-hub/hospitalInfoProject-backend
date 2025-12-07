@@ -5,7 +5,9 @@ WORKDIR /app
 
 # pom.xml 먼저 복사 (의존성 캐싱)
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+
+# [수정 1] os.detected.classifier 옵션을 추가하여 강제로 리눅스 라이브러리를 다운로드하게 함
+RUN mvn dependency:go-offline -B -Dos.detected.classifier=linux-x86_64
 
 # 소스 코드 복사
 COPY src ./src
@@ -22,8 +24,9 @@ RUN if [ -f "src/main/resources/db.properties" ]; then \
     fi
 
 # Maven 빌드
+# [수정 2] 빌드 시에도 동일하게 classifier 옵션 적용
 RUN echo "=== Maven 빌드 시작 ===" && \
-    mvn clean package -DskipTests -B
+    mvn clean package -DskipTests -B -Dos.detected.classifier=linux-x86_64
 
 # 빌드 결과 확인
 RUN echo "=== 빌드 결과 ===" && \
