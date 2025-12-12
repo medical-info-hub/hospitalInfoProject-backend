@@ -871,47 +871,55 @@ for (String hospitalCode : chunk) {
 
 ### 시간대별 시스템 메트릭 (실측)
 
-| 시간 | 경과 | JVM Threads | Heap Memory | CPU | DB Conn |
-|------|------|-------------|-------------|-----|---------|
-| **23:36** | 0분 (시작) | 28 → 44 | 53 → 111 MB | 4.0 → 6.0% | 0 → 2 |
-| **23:51** | 15분 | 45 | 115 MB | 8.2% | 3 |
-| **00:06** | 30분 | 44 | 120 MB | 9.5% | 2 |
-| **00:21** | 45분 | 43 | 118 MB | 8.8% | 2 |
-| **00:42** | 66분 (완료) | 38 | 110 MB | 3.85% | 1 |
+| 시간 | 경과 | JVM Threads | Heap Memory | CPU % | DB Conn |
+|------|------|-------------|-------------|-------|---------|
+| **23:36** | 0분 (시작) | 29.0 | 211 MB | 6.1 | 0.0 |
+| **23:51** | 15분 | 40.1 | 162.5 MB | 6.4 | 0.0 |
+| **00:06** | 30분 | 40.1 | 163.0 MB | 6.5 | 0.0 |
+| **00:21** | 45분 | 40.1 | 162.5 MB | 6.4 | 0.0 |
+| **00:42** | 66분 (완료) | 38.0 | 187.1 MB | 7.3 | 0.0 |
 
 **안정성 분석**:
-- ✅ 메모리: 최대 120MB (OOM 없음, 안정적)
-- ✅ CPU: 평균 8-9% (부하 낮음)
-- ✅ 스레드: 38-45개 (안정적, 최대 15개 제한)
-- ✅ DB 연결: 최대 3개 (HikariCP 최대 50개 중)
+- ✅ 메모리: 시작 211MB → 실행 중 163MB (안정화) → 완료 187MB
+- ✅ CPU: 평균 6-7% (매우 낮은 부하)
+- ✅ 스레드: 29 → 40 (안정적, apiExecutor 최대 15개)
+- ✅ DB 연결: 0개 (배치 처리 후 즉시 반환)
 
 ### 시스템 부하 추이 그래프
 
 #### 메모리 사용량 (MB)
 ```mermaid
-graph TD
-    A[시작: 53MB] --> B[15분: 115MB]
-    B --> C[30분: 120MB 피크]
-    C --> D[45분: 118MB]
-    D --> E[완료: 110MB]
+graph LR
+    A[0분: 211MB] --> B[15분: 162.5MB]
+    B --> C[30분: 163MB]
+    C --> D[45분: 162.5MB]
+    D --> E[66분: 187MB]
 
-    style A fill:#E8F4F8
-    style C fill:#FFE4B2
-    style E fill:#90EE90
+    style A fill:#FFE4B2
+    style B fill:#90EE90
+    style C fill:#90EE90
+    style D fill:#90EE90
+    style E fill:#E8F4F8
 ```
+
+**메모리 패턴**: 시작 시 높음(211MB) → 실행 중 안정화(~163MB) → 완료 후 약간 증가(187MB)
 
 #### CPU 사용률 (%)
 ```mermaid
-graph TD
-    A[시작: 4.0%] --> B[15분: 8.2%]
-    B --> C[30분: 9.5% 피크]
-    C --> D[45분: 8.8%]
-    D --> E[완료: 3.85%]
+graph LR
+    A[0분: 6.1%] --> B[15분: 6.4%]
+    B --> C[30분: 6.5%]
+    C --> D[45분: 6.4%]
+    D --> E[66분: 7.3%]
 
-    style A fill:#E8F4F8
-    style C fill:#FFE4B2
+    style A fill:#90EE90
+    style B fill:#90EE90
+    style C fill:#90EE90
+    style D fill:#90EE90
     style E fill:#90EE90
 ```
+
+**CPU 패턴**: 전 구간 6-7% 유지 (매우 안정적, Rate Limit 효과)
 
 ### 최적화 효과 비교
 
@@ -1227,13 +1235,12 @@ public CompletableFuture<Set<String>> retryFailedCodesAsync(int maxRetries) {
 
 #### 사용 예시
 
-**패턴 1: 순차 실행 (CompletableFuture 체이닝)**
 ```java
 @PostMapping("/api/details/save")
 public CompletableFuture<ResponseEntity<?>> saveHospitalDetails() {
     List<String> hospitalCodes = hospitalWebService.getAllHospitalCodes();
 
-    // 1차 실행 → 완료 후 재시도 → 결과 반환
+    // 1차 실행 → 완료 후 재시도 → 결과 반환 (CompletableFuture 체이닝)
     return asyncRunner.runBatchAsync(hospitalCodes)
         .thenCompose(v -> asyncRunner.retryFailedCodesAsync(3))
         .thenApply(finalFailed -> {
@@ -1247,26 +1254,10 @@ public CompletableFuture<ResponseEntity<?>> saveHospitalDetails() {
 }
 ```
 
-**패턴 2: 동기식 대기 (간단한 사용)**
-```java
-@PostMapping("/api/details/save")
-public ResponseEntity<?> saveHospitalDetailsSync() {
-    List<String> hospitalCodes = hospitalWebService.getAllHospitalCodes();
-
-    // 1차 실행 완료 대기
-    asyncRunner.runBatchAsync(hospitalCodes).join();
-
-    // 재시도 완료 대기
-    Set<String> finalFailed = asyncRunner.retryFailedCodesAsync(3).join();
-
-    if (finalFailed.isEmpty()) {
-        return ResponseEntity.ok("모든 병원 처리 완료");
-    } else {
-        return ResponseEntity.status(206)
-            .body("처리 완료 (최종 실패: " + finalFailed.size() + "건)");
-    }
-}
-```
+**핵심 포인트**:
+- `runBatchAsync()`: CompletableFuture 반환으로 비동기 처리
+- `thenCompose()`: 1차 완료 후 재시도 실행
+- `thenApply()`: 최종 결과 가공하여 응답 반환
 
 #### 재시도 로그 예시
 
