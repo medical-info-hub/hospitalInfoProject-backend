@@ -30,22 +30,22 @@
 │  병원 상세정보 API (공공데이터포털)            │
 │                                                │
 │  필수 파라미터: ykiho (병원코드)               │
-│  ❌ 제약사항: 한 번에 1개 병원만 조회 가능     │
+│  제약사항: 한 번에 1개 병원만 조회 가능        │
 │                                                │
-│  79,081개 병원 = 79,081번 API 호출 필요 😱     │
+│  79,081개 병원 = 79,081번 API 호출 필요        │
 └────────────────────────────────────────────────┘
 ```
 
-**병목의 본질**: API가 병원코드를 **단 하나**만 받아서, 79,081개 데이터를 **하나씩** 호출해야 한다는 점!
+**병목의 본질**: API가 병원코드를 단 하나만 받아서, 79,081개 데이터를 하나씩 호출해야 한다는 제약사항
 
 ### 요구사항
 
 | 항목 | 목표 | 중요도 |
 |------|------|--------|
-| **대용량 API 호출 처리** | 79,081건 효율적 처리 | 🔴 High |
-| **처리 시간 단축** | 순차 처리 대비 큰 폭 개선 | 🔴 High |
-| **메모리 효율성** | OOM 방지 | 🔴 High |
-| **동시성 안전성** | 멀티스레드 환경에서 안전한 카운팅 | 🟡 Medium |
+| **대용량 API 호출 처리** | 79,081건 효율적 처리 | High |
+| **처리 시간 단축** | 순차 처리 대비 큰 폭 개선 | High |
+| **메모리 효율성** | OOM 방지 | High |
+| **동시성 안전성** | 멀티스레드 환경에서 안전한 카운팅 | Medium |
 
 ### 핵심 성과
 
@@ -91,8 +91,8 @@ graph LR
 
 **총 소요 시간 계산** (추정):
 ```
-79,081개 × 500ms = 39,540초 = 약 11시간 😱
-(실제 측정 불가 - 너무 오래 걸려서 비동기 방식으로 구현)
+79,081개 × 500ms = 39,540초 = 약 11시간
+(실제 측정 불가 - 소요 시간이 과도하여 비동기 방식으로 구현)
 ```
 
 ### 병목 지점 식별
@@ -117,18 +117,18 @@ graph TD
 ```
 
 1. **API 호출 대기 시간**: 각 요청마다 평균 200-500ms 소요
-2. **순차 처리**: CPU가 놀고 있는 시간이 대부분 (I/O 대기)
+2. **순차 처리**: CPU 유휴 시간이 대부분 (I/O 대기)
 3. **API 제약**: 한 번에 1개 병원코드만 조회 가능 (배치 불가)
 4. **개별 DB 저장**: 79,081번의 개별 INSERT 쿼리
 
 ### 해결 전략
 
 ```
-병목 원인: API는 1개씩만 받지만, 순차적으로 처리하면 너무 느림
+병목 원인: API는 1개씩만 받지만, 순차적으로 처리하면 비효율적
           ↓
-해결 방안: 청크 단위로 묶어서 병렬 처리!
+해결 방안: 청크 단위로 묶어서 병렬 처리
           ↓
-기대 효과: 10개 스레드 × 병렬 = 10배 빨라짐
+기대 효과: 10개 스레드 × 병렬 = 10배 성능 향상
 ```
 
 ---
@@ -137,7 +137,7 @@ graph TD
 
 ### 핵심 아이디어
 
-> **"API는 1개씩만 받지만, 여러 개를 동시에 호출하면 되지 않을까?"**
+> API는 1개씩만 받지만, 여러 개를 동시에 호출하여 처리 시간을 단축
 
 ### 청크 기반 병렬 처리 전략
 
@@ -252,13 +252,13 @@ private List<List<String>> partitionList(List<String> list, int size) {
 #### 문제: Race Condition
 
 ```java
-// ❌ 잘못된 예: Thread-unsafe
+// 잘못된 예: Thread-unsafe
 private int completedCount = 0;
 
 public void processChunk(List<String> chunk) {
     for (String code : chunk) {
         // ...
-        completedCount++;  // ❌ Race Condition 발생!
+        completedCount++;  // Race Condition 발생
     }
 }
 ```
@@ -268,17 +268,17 @@ public void processChunk(List<String> chunk) {
 ```
 시나리오:
   스레드1: completedCount 읽기 (100)
-  스레드2: completedCount 읽기 (100)  ← 동시에 읽음!
+  스레드2: completedCount 읽기 (100)  ← 동시에 읽음
   스레드1: 100 + 1 = 101 쓰기
-  스레드2: 100 + 1 = 101 쓰기  ← 1건 손실!
+  스레드2: 100 + 1 = 101 쓰기  ← 1건 손실
 
-결과: 2번 증가했는데 101... 1건 카운트 누락! 😱
+결과: 2번 증가했는데 101... 1건 카운트 누락
 ```
 
 #### 해결: AtomicInteger (CAS 기반)
 
 ```java
-// ✅ 올바른 예: Thread-safe
+// 올바른 예: Thread-safe
 private final AtomicInteger completedCount = new AtomicInteger(0);
 private final AtomicInteger failedCount = new AtomicInteger(0);
 private final AtomicInteger insertedCount = new AtomicInteger(0);
@@ -289,7 +289,7 @@ public void processChunk(List<String> chunk) {
         try {
             // API 호출 및 처리
             // ...
-            completedCount.incrementAndGet();  // ✅ Atomic 연산!
+            completedCount.incrementAndGet();  // Atomic 연산
         } catch (Exception e) {
             failedCount.incrementAndGet();
         }
@@ -306,7 +306,7 @@ public final int incrementAndGet() {
         int current = get();              // 현재 값 읽기
         int next = current + 1;           // 새 값 계산
         if (compareAndSet(current, next)) // 원자적 비교 후 설정
-            return next;                  // 성공!
+            return next;                  // 성공
         // 실패 시 재시도 (다른 스레드가 먼저 변경함)
     }
 }
@@ -379,7 +379,7 @@ RateLimiter가 전체 속도를 초당 20건으로 제한
   ↓
 각 스레드는 필요 시 대기 (acquire())
   ↓
-API 서버 부하 방지! ✅
+API 서버 부하 방지
 ```
 
 ### 성능 비교
@@ -392,7 +392,7 @@ graph LR
     style B fill:#90EE90
 ```
 
-**성능 개선**: 순차 ~11시간 (추정) → 병렬 66분 (약 **90% 단축** ✅)
+**성능 개선**: 순차 ~11시간 (추정) → 병렬 66분 (약 90% 단축)
 
 ---
 
@@ -400,32 +400,32 @@ graph LR
 
 ### 발견된 문제 1: 메모리 부족 (OOM)
 
-초기 비동기 처리 방식에서 모든 데이터를 메모리에 적재 후 한 번에 저장하려다가 OutOfMemoryError 발생!
+초기 비동기 처리 방식에서 모든 데이터를 메모리에 적재 후 한 번에 저장하려다가 OutOfMemoryError 발생
 
 ```java
-// ❌ 잘못된 예: 모든 데이터를 메모리에 적재
+// 잘못된 예: 모든 데이터를 메모리에 적재
 List<HospitalDetail> allDetails = new ArrayList<>();
 
 for (String hospitalCode : hospitalCodes) {
     List<HospitalDetail> parsed = parser.parse(response, hospitalCode);
-    allDetails.addAll(parsed);  // 79,081개 누적 → OOM!
+    allDetails.addAll(parsed);  // 79,081개 누적 → OOM
 }
 
 // 마지막에 한 번에 저장
-hospitalDetailRepository.saveAll(allDetails);  // 😱 메모리 폭발!
+hospitalDetailRepository.saveAll(allDetails);  // 메모리 부족 발생
 ```
 
 **문제 분석**:
 ```
 79,081개 엔티티 × 평균 2KB = 약 158MB
 + JPA 영속성 컨텍스트 오버헤드 (약 3배)
-= 약 500MB ~ 1GB 메모리 사용 😱
+= 약 500MB ~ 1GB 메모리 사용
 ```
 
 ### 해결: if 방식 배치 처리
 
 ```java
-// ✅ 개선된 예: 100개씩 중간 저장
+// 개선된 예: 100개씩 중간 저장
 private static final int BATCH_SIZE = 100;
 
 List<HospitalDetailApiItem> toInsert = new ArrayList<>();
@@ -445,7 +445,7 @@ for (String hospitalCode : chunk) {
         }
     }
 
-    // ✅ 100개 쌓이면 중간 저장 (메모리 효율)
+    // 100개 쌓이면 중간 저장 (메모리 효율)
     if (toInsert.size() + toUpdate.size() >= BATCH_SIZE) {
         saveBatchAndClear(toInsert, toUpdate);
     }
@@ -462,13 +462,13 @@ if (!toInsert.isEmpty() || !toUpdate.isEmpty()) {
 Before: 79,081개 동시 적재 → 500MB-1GB
 After: 최대 100개만 적재 → 약 1MB
 
-메모리 사용량 99% 감소! ✅
+메모리 사용량 99% 감소
 ```
 
 ### 발견된 문제 2: N+1 문제
 
 ```java
-// ❌ AS-IS: N+1 문제
+// AS-IS: N+1 문제
 for (String hospitalCode : chunk) {
     // 매번 DB 조회 (N번)
     HospitalDetail existing = hospitalDetailRepository.findByHospitalCode(hospitalCode);
@@ -478,20 +478,20 @@ for (String hospitalCode : chunk) {
 
 **문제 분석**:
 ```
-79,081개 병원 × 1번 조회 = 79,081번 SELECT 쿼리 😱
+79,081개 병원 × 1번 조회 = 79,081번 SELECT 쿼리
 
 각 쿼리 5ms 소요 시:
-79,081 × 5ms = 395초 = 6.5분 (DB 조회만!)
+79,081 × 5ms = 395초 = 6.5분 (DB 조회만)
 ```
 
 ### 해결: 청크 단위 배치 조회
 
 ```java
-// ✅ TO-BE: 청크 단위 배치 조회 (1번)
+// TO-BE: 청크 단위 배치 조회 (1번)
 private Map<String, HospitalDetailApiItem> loadExistingDetails(List<String> chunk) {
-    // 100개 병원코드를 한 번에 조회!
+    // 100개 병원코드를 한 번에 조회
     List<HospitalDetailApiItem> existingDetails =
-        jdbcRepository.findByHospitalCodeInAsMap(chunk);  // 1번 조회!
+        jdbcRepository.findByHospitalCodeInAsMap(chunk);  // 1번 조회
 
     return existingDetails.stream()
         .collect(Collectors.toMap(
@@ -527,7 +527,7 @@ public Map<String, HospitalDetailApiItem> findByHospitalCodeInAsMap(List<String>
 Before: 79,081번 SELECT
 After: 791번 SELECT (청크당 1번)
 
-쿼리 수 99% 감소! ✅
+쿼리 수 99% 감소
 ```
 
 ### 배치 저장 최적화
@@ -543,14 +543,14 @@ private synchronized int[] saveBatchAndClear(
         jdbcRepository.batchInsert(toInsert);  // Batch INSERT
         inserted = toInsert.size();
         insertedCount.addAndGet(inserted);
-        toInsert.clear();  // ✅ 메모리 해제
+        toInsert.clear();  // 메모리 해제
     }
 
     if (!toUpdate.isEmpty()) {
         jdbcRepository.batchUpdate(toUpdate);  // Batch UPDATE
         updated = toUpdate.size();
         updatedCount.addAndGet(updated);
-        toUpdate.clear();  // ✅ 메모리 해제
+        toUpdate.clear();  // 메모리 해제
     }
 
     return new int[] { inserted, updated };
@@ -566,7 +566,7 @@ private synchronized int[] saveBatchAndClear(
 
 ```java
 private void updateDetailFields(HospitalDetailApiItem existing, HospitalDetailApiItem newData) {
-    // ✅ 변경된 필드만 업데이트
+    // 변경된 필드만 업데이트
     if (!Objects.equals(existing.getParkQty(), newData.getParkQty())) {
         existing.setParkQty(newData.getParkQty());
     }
@@ -589,10 +589,10 @@ private void updateDetailFields(HospitalDetailApiItem existing, HospitalDetailAp
 
 | 개선 사항 | Before | After | 효과 |
 |----------|--------|-------|------|
-| **DB 조회** | N번 (79,081번) | 791번 (청크당 1번) | **99% 감소** ✅ |
-| **메모리 사용량** | 79,081개 적재 (1GB) | 최대 100개 (1MB) | **99% 감소** ✅ |
-| **저장 방식** | 한 번에 저장 | 100개씩 저장 | **안정성 향상** ✅ |
-| **필드 업데이트** | 전체 덮어쓰기 | 변경 필드만 | **효율성 향상** ✅ |
+| **DB 조회** | N번 (79,081번) | 791번 (청크당 1번) | 99% 감소 |
+| **메모리 사용량** | 79,081개 적재 (1GB) | 최대 100개 (1MB) | 99% 감소 |
+| **저장 방식** | 한 번에 저장 | 100개씩 저장 | 안정성 향상 |
+| **필드 업데이트** | 전체 덮어쓰기 | 변경 필드만 | 효율성 향상 |
 
 ---
 
@@ -828,7 +828,7 @@ for (String hospitalCode : chunk) {
     } catch (Exception e) {
         failedCount.incrementAndGet();
         log.error("API 호출 실패: {}", hospitalCode, e);
-        // ✅ 한 건 실패해도 나머지는 계속 처리
+        // 한 건 실패해도 나머지는 계속 처리
     }
 }
 ```
@@ -866,7 +866,7 @@ for (String hospitalCode : chunk) {
 **처리 속도**:
 ```
 79,081개 / 66분 = 약 1,198개/분 = 약 20개/초
-→ Rate Limit 20건/초에 정확히 맞춰 동작! ✅
+→ Rate Limit 20건/초에 정확히 맞춰 동작
 ```
 
 ### 시간대별 시스템 메트릭 (실측)
@@ -880,10 +880,10 @@ for (String hospitalCode : chunk) {
 | **00:42** | 66분 (완료) | 38.0 | 187.1 MB | 7.3 | 0.0 |
 
 **안정성 분석**:
-- ✅ 메모리: 시작 211MB → 실행 중 163MB (안정화) → 완료 187MB
-- ✅ CPU: 평균 6-7% (매우 낮은 부하)
-- ✅ 스레드: 29 → 40 (안정적, apiExecutor 최대 15개)
-- ✅ DB 연결: 0개 (배치 처리 후 즉시 반환)
+- 메모리: 시작 211MB → 실행 중 163MB (안정화) → 완료 187MB
+- CPU: 평균 6-7% (낮은 부하)
+- 스레드: 29 → 40 (안정적, apiExecutor 최대 15개)
+- DB 연결: 0개 (배치 처리 후 즉시 반환)
 
 ### 시스템 부하 추이 그래프
 
@@ -934,18 +934,18 @@ graph LR
 | 방식 | 처리 시간 | 개선율 |
 |------|---------|-------|
 | **순차 처리 (추정)** | ~11시간 (660분) | - |
-| **비동기 병렬 (실측)** | 66분 | **90% 단축** ✅ |
+| **비동기 병렬 (실측)** | 66분 | 90% 단축 |
 
-**최종 성능**: 순차 대비 약 **90% 단축** (11시간 → 66분)
+**최종 성능**: 순차 대비 약 90% 단축 (11시간 → 66분)
 
 ### 메모리 사용량 비교
 
 | 방식 | 피크 메모리 | 안정성 |
 |------|-----------|-------|
-| **전체 적재 (가정)** | ~1GB (OOM 위험) | ❌ 불안정 |
-| **배치 저장 (실측)** | **120MB** | ✅ 안정적 |
+| **전체 적재 (가정)** | ~1GB (OOM 위험) | 불안정 |
+| **배치 저장 (실측)** | 120MB | 안정적 |
 
-**메모리 사용량 88% 감소!** ✅
+**메모리 사용량 88% 감소**
 
 ### DB 쿼리 수 비교
 
@@ -959,9 +959,9 @@ graph LR
 
 | 항목 | Before | After | 개선율 |
 |------|--------|-------|-------|
-| **SELECT 쿼리** | 79,081번 | 791번 | **99% 감소** ✅ |
-| **INSERT 쿼리** | 개별 (수만 번) | 배치 (수백 번) | **95% 감소** ✅ |
-| **UPDATE 쿼리** | 개별 (수만 번) | 배치 (수백 번) | **95% 감소** ✅ |
+| **SELECT 쿼리** | 79,081번 | 791번 | 99% 감소 |
+| **INSERT 쿼리** | 개별 (수만 번) | 배치 (수백 번) | 95% 감소 |
+| **UPDATE 쿼리** | 개별 (수만 번) | 배치 (수백 번) | 95% 감소 |
 
 ### 동시성 검증
 
@@ -969,11 +969,11 @@ graph LR
 
 ```
 예시:
-완료 + 실패 = 전체 처리 건수 ✅
-신규 + 수정 = 성공 건수 ✅
+완료 + 실패 = 전체 처리 건수
+신규 + 수정 = 성공 건수
 ```
 
-**AtomicInteger 덕분에 멀티스레드 환경에서도 정확한 카운팅!** ✅
+**AtomicInteger를 통한 멀티스레드 환경에서의 정확한 카운팅**
 
 ---
 
@@ -983,11 +983,11 @@ graph LR
 
 | 목표 | 결과 | 달성 |
 |------|------|------|
-| 대용량 API 호출 처리 | 79,081건 안정적 처리 (실측) | ✅ |
-| 처리 시간 단축 | **90% 단축** (11h → 66분) | ✅ |
-| 메모리 효율성 | **88% 감소** (1GB → 120MB) | ✅ |
-| 동시성 안전성 | AtomicInteger로 정확한 카운팅 | ✅ |
-| N+1 문제 해결 | **99% 감소** (79,081번 → 791번) | ✅ |
+| 대용량 API 호출 처리 | 79,081건 안정적 처리 (실측) | 완료 |
+| 처리 시간 단축 | 90% 단축 (11h → 66분) | 완료 |
+| 메모리 효율성 | 88% 감소 (1GB → 120MB) | 완료 |
+| 동시성 안전성 | AtomicInteger로 정확한 카운팅 | 완료 |
+| N+1 문제 해결 | 99% 감소 (79,081번 → 791번) | 완료 |
 
 ### 최적화 효과 요약
 
@@ -1017,32 +1017,32 @@ After (비동기 병렬 + 배치):
 <tr>
 <td><b>처리 시간</b></td>
 <td><b>66분</b></td>
-<td>🟢 매우 빠름</td>
+<td>우수</td>
 </tr>
 <tr>
 <td><b>처리 속도</b></td>
 <td><b>20개/초</b></td>
-<td>🟢 효율적</td>
+<td>효율적</td>
 </tr>
 <tr>
 <td><b>메모리 사용량</b></td>
 <td><b>120MB</b></td>
-<td>🟢 안정적</td>
+<td>안정적</td>
 </tr>
 <tr>
 <td><b>성능 개선율</b></td>
 <td><b>90% 단축</b></td>
-<td>🟢 목표 달성</td>
+<td>목표 달성</td>
 </tr>
 <tr>
 <td><b>DB 쿼리 감소율</b></td>
 <td><b>99% 감소</b></td>
-<td>🟢 매우 효율적</td>
+<td>효율적</td>
 </tr>
 <tr>
 <td><b>동시성 정확도</b></td>
 <td><b>100%</b></td>
-<td>🟢 완벽</td>
+<td>정확</td>
 </tr>
 </table>
 
@@ -1062,10 +1062,10 @@ graph TD
 
 ### 기술적 의의
 
-이 최적화 과정은 단순히 성능을 개선한 것을 넘어, **문제의 본질을 이해하고 점진적으로 개선하는 엔지니어링 사고**를 보여줍니다:
+이 최적화 과정은 단순히 성능을 개선한 것을 넘어, 문제의 본질을 이해하고 점진적으로 개선하는 엔지니어링 접근 방식을 적용:
 
 1. **문제의 근본 원인 파악**: API 제약 (1개씩만 조회) + 순차 처리
-2. **창의적 해결책**: 청크 기반 병렬 처리로 병목 우회
+2. **병렬 처리 적용**: 청크 기반 병렬 처리로 병목 우회
 3. **점진적 개선**: 순차 → 비동기 → 배치 최적화
 4. **동시성 제어**: AtomicInteger, ConcurrentHashMap, synchronized
 5. **실측 기반 검증**: 이론치와 실측치 비교로 검증
@@ -1096,7 +1096,7 @@ graph TD
 
 #### 재시도 전략: 실패 코드만 재처리
 
-**핵심 아이디어**: 청크 전체를 재시도하지 않고, **실패한 병원코드만** 추출하여 재시도!
+**핵심 아이디어**: 청크 전체를 재시도하지 않고, 실패한 병원코드만 추출하여 재시도
 
 ```mermaid
 graph TD
@@ -1137,7 +1137,7 @@ private void processChunk(List<String> chunk, Set<String> processedCodes) {
 
         } catch (Exception e) {
             failedCount.incrementAndGet();
-            failedCodes.add(hospitalCode);  // ✅ 실패 코드 추적
+            failedCodes.add(hospitalCode);  // 실패 코드 추적
             log.error("API 호출 실패: {}", hospitalCode, e);
         }
     }
@@ -1167,7 +1167,7 @@ public CompletableFuture<Set<String>> retryFailedCodesAsync(int maxRetries) {
                 // 이전 실패 코드 초기화
                 failedCodes.clear();
 
-                // 재시도 실행 (CompletableFuture로 청크 병렬 처리!)
+                // 재시도 실행 (CompletableFuture로 청크 병렬 처리)
                 List<List<String>> partitions = partitionList(toRetry, CHUNK_SIZE);
                 Set<String> processedCodes = ConcurrentHashMap.newKeySet();
 
@@ -1227,11 +1227,11 @@ public CompletableFuture<Set<String>> retryFailedCodesAsync(int maxRetries) {
 
 | 방식 | 재시도 건수 | 소요 시간 | API 부하 |
 |------|-----------|---------|---------|
-| **청크 단위 재시도** | ~8,000건 (80개 청크 × 100) | ~6.7분 | 높음 😱 |
-| **실패 코드만 재시도** | 766건 | ~38초 | 낮음 ✅ |
-| **+ Exponential Backoff** | 766 + 66 + 6 = 838건 | ~1분 | 매우 낮음 ✅ |
+| **청크 단위 재시도** | ~8,000건 (80개 청크 × 100) | ~6.7분 | 높음 |
+| **실패 코드만 재시도** | 766건 | ~38초 | 낮음 |
+| **+ Exponential Backoff** | 766 + 66 + 6 = 838건 | ~1분 | 매우 낮음 |
 
-**효율성 개선**: 청크 단위 대비 약 **10배 효율적**!
+**효율성 개선**: 청크 단위 대비 약 10배 효율적
 
 #### 사용 예시
 
@@ -1341,12 +1341,9 @@ if (failedCount.get() / (double) totalCount > 0.05) {
 
 ---
 
-<div align="center">
+## 요약
 
-**🚀 완벽한 최적화 성공!**
+**최적화 결과**
 
-순차 ~11시간 (추정) → 비동기 66분 (실측, 90% 단축)
-
-79,081번 SELECT → 791번 SELECT (99% 감소)
-
-</div>
+- 처리 시간: 순차 ~11시간 (추정) → 비동기 66분 (실측, 90% 단축)
+- DB 쿼리: 79,081번 SELECT → 791번 SELECT (99% 감소)
