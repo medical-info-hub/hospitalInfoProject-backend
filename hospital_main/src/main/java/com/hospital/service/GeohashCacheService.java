@@ -24,7 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 지오해시 기반 격자 캐싱 서비스 (올바른 구현)
+ * 지오해시 기반 격자 캐싱 서비스
  *
  * 핵심 원칙:
  * 1. 각 격자는 독립적인 캐시 단위
@@ -356,18 +356,17 @@ public class GeohashCacheService {
 	}
 
 	/**
-	 * 병원 데이터를 격자별로 분류하여 비동기 캐싱 (최적화: MISS된 격자만 캐싱)
+	 * MISS된 격자들을 각각 독립적으로 조회하여 비동기 캐싱
 	 *
-	 * @param hospitals MBR로 조회된 병원 리스트
 	 * @param userLat 사용자 위도
 	 * @param userLon 사용자 경도
 	 */
 	@Async("hospitalTaskExecutor")
-	public void cacheHospitalsByGridAsync(List<HospitalWebResponse> hospitals, double userLat, double userLon) {
+	public void cacheHospitalsByGridAsync(double userLat, double userLon) {
 		long startTime = System.currentTimeMillis();
-		log.info("=== 백그라운드 격자 캐싱 시작: 총 {}개 병원 ===", hospitals.size());
+		log.info("=== 백그라운드 격자 캐싱 시작 ===");
 
-		// 1. MISS된 격자만 가져오기 (이미 캐시된 격자는 제외) ✅
+		// 1. MISS된 격자만 가져오기 (이미 캐시된 격자는 제외)
 		Set<String> missedGrids = getMissedGrids(userLat, userLon);
 
 		if (missedGrids.isEmpty()) {
@@ -378,38 +377,29 @@ public class GeohashCacheService {
 		log.info("캐싱 대상: MISS된 {}개 격자 (9개 중 {}개는 이미 캐시됨)",
 			missedGrids.size(), 9 - missedGrids.size());
 
-		// 2. 병원들을 격자별로 분류 (MISS된 격자만)
-		Map<String, List<HospitalWebResponse>> gridMap = new HashMap<>();
-		for (String gridKey : missedGrids) {
-			gridMap.put(gridKey, new ArrayList<>());
-		}
-
-		for (HospitalWebResponse hospital : hospitals) {
-			String hospitalGrid = getGeohash(hospital.getCoordinateY(), hospital.getCoordinateX());
-
-			// MISS된 격자에 속하는 병원만 추가
-			if (gridMap.containsKey(hospitalGrid)) {
-				gridMap.get(hospitalGrid).add(hospital);
-			}
-		}
-
-		// 3. 각 격자별로 병렬 캐싱 (MISS된 격자만)
-		List<CompletableFuture<Void>> cachingFutures = gridMap.entrySet().stream()
-			.map(entry -> CompletableFuture.runAsync(() -> {
-				String geohashKey = entry.getKey();
-				List<HospitalWebResponse> gridHospitals = entry.getValue();
-				String cacheKey = CACHE_KEY_PREFIX + geohashKey;
-
+		// 2. 각 격자별로 독립적으로 DB 조회 및 캐싱 (병렬 처리)
+		List<CompletableFuture<Void>> cachingFutures = missedGrids.stream()
+			.map(geohashKey -> CompletableFuture.runAsync(() -> {
 				try {
-					redisTemplate.opsForValue().set(cacheKey, gridHospitals, CACHE_TTL_HOURS, TimeUnit.HOURS);
-					log.info("격자 캐싱 완료: {} ({}개 병원)", cacheKey, gridHospitals.size());
+					// 각 격자의 MBR 범위로 독립적으로 DB 조회
+					List<HospitalWebResponse> hospitals = fetchHospitalsForGrid(geohashKey);
+
+					// Redis 캐싱
+					String cacheKey = CACHE_KEY_PREFIX + geohashKey;
+					if (!hospitals.isEmpty()) {
+						redisTemplate.opsForValue().set(cacheKey, hospitals, CACHE_TTL_HOURS, TimeUnit.HOURS);
+						log.info("격자 캐싱 완료: {} ({}개 병원)", cacheKey, hospitals.size());
+					} else {
+						redisTemplate.opsForValue().set(cacheKey, List.of(), CACHE_TTL_HOURS, TimeUnit.HOURS);
+						log.debug("빈 격자 캐싱: {}", cacheKey);
+					}
 				} catch (Exception e) {
-					log.error("격자 캐싱 실패: {}, 오류: {}", cacheKey, e.getMessage());
+					log.error("격자 {} 캐싱 실패: {}", geohashKey, e.getMessage());
 				}
 			}, hospitalTaskExecutor))
 			.collect(Collectors.toList());
 
-		// 4. 모든 캐싱 완료 대기
+		// 3. 모든 캐싱 완료 대기
 		CompletableFuture.allOf(cachingFutures.toArray(new CompletableFuture[0])).join();
 
 		long totalTime = System.currentTimeMillis() - startTime;
