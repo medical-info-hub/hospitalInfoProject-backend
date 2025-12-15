@@ -152,18 +152,33 @@ http {
 }
 EOF
 
-    # Nginx 설정을 컨테이너에 복사
-    echo "📋 Nginx 컨테이너에 설정 파일 복사 중..."
-    docker cp /opt/hospital/config/nginx/nginx.conf hospital-nginx:/etc/nginx/nginx.conf
+    # Nginx 설정 파일이 호스트에 저장됨 (볼륨 마운트로 자동 반영됨)
+    echo "📋 Nginx 설정 파일 업데이트 완료 (${primary} 활성)"
     
-    # Nginx 설정 리로드
-    if docker exec hospital-nginx nginx -t > /dev/null 2>&1; then
-        docker exec hospital-nginx nginx -s reload
-        echo -e "${GREEN}✅ Nginx 설정 리로드 완료${NC}"
-    else
-        echo -e "${RED}❌ Nginx 설정 오류${NC}"
-        return 1
-    fi
+    # Nginx 재시작으로 설정 반영
+    echo "🔄 Nginx 재시작 중..."
+    docker restart hospital-nginx
+    
+    # Nginx 시작 대기 및 헬스체크
+    local max_attempts=15
+    local attempt=0
+    
+    echo "⏳ Nginx 시작 대기 중..."
+    sleep 3
+    
+    while [ $attempt -lt $max_attempts ]; do
+        if curl -f -s http://localhost/nginx-health > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Nginx 정상 작동 확인 (${primary} 연결)${NC}"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        echo "대기 중... ($attempt/$max_attempts)"
+        sleep 2
+    done
+    
+    echo -e "${RED}❌ Nginx 재시작 실패${NC}"
+    docker logs hospital-nginx --tail 20
+    return 1
 }
 
 # 메인 배포 로직
@@ -186,7 +201,16 @@ sudo mkdir -p /opt/hospital/logs/backend/blue
 sudo mkdir -p /opt/hospital/logs/backend/green
 sudo mkdir -p /opt/hospital/logs/nginx
 sudo mkdir -p /opt/hospital/config/nginx
-sudo chown -R ec2-user:ec2-user /opt/hospital/
+
+# MariaDB 데이터 디렉토리는 999:999 (mysql 사용자) 권한 설정
+echo "🔐 MariaDB 디렉토리 권한 설정 중..."
+sudo chown -R 999:999 /opt/hospital/data/mariadb
+sudo chmod -R 755 /opt/hospital/data/mariadb
+
+# 나머지는 ec2-user 권한
+sudo chown -R ec2-user:ec2-user /opt/hospital/data/redis
+sudo chown -R ec2-user:ec2-user /opt/hospital/logs/
+sudo chown -R ec2-user:ec2-user /opt/hospital/config/
 
 # Nginx 설정 파일이 없으면 생성
 if [ ! -f "/opt/hospital/config/nginx/nginx.conf" ]; then
@@ -236,15 +260,89 @@ fi
 
 # Nginx 트래픽 전환
 echo "🔀 트래픽을 ${TARGET_CONTAINER}로 전환 중..."
-update_nginx_config "$TARGET_CONTAINER" "$ACTIVE_CONTAINER"
+if update_nginx_config "$TARGET_CONTAINER" "$ACTIVE_CONTAINER"; then
+    echo -e "${GREEN}✅ Nginx 트래픽 전환 완료${NC}"
+else
+    echo -e "${RED}⚠️ Nginx 설정 업데이트 실패!${NC}"
+    echo "🔄 자동 복구: ${ACTIVE_CONTAINER}로 롤백 시도..."
+    
+    # 원래 설정으로 롤백
+    update_nginx_config "$ACTIVE_CONTAINER" "$ACTIVE_CONTAINER" || true
+    
+    # 새 컨테이너 중지
+    echo "⏹️ ${TARGET_CONTAINER} 컨테이너 중지..."
+    docker stop hospital-backend-${TARGET_CONTAINER} 2>&1 || true
+    
+    echo -e "${RED}❌ 배포 실패 - 이전 상태로 복구됨${NC}"
+    exit 1
+fi
 
-# 연결 드레이닝 대기 (기존 요청 처리 완료 대기)
-echo "⏳ 기존 연결 종료 대기 (30초)..."
-sleep 30
+# 트래픽 전환 확인
+sleep 5
+echo "✅ 트래픽 전환 단계 완료"
 
-# 이전 컨테이너 중지
-echo "⏹️ 이전 컨테이너(${ACTIVE_CONTAINER}) 중지..."
-docker-compose -f $COMPOSE_FILE stop backend-${ACTIVE_CONTAINER}
+# 이전 컨테이너 즉시 중지 (연결 드레이닝 생략 - Nginx가 이미 다른 컨테이너로 라우팅 중)
+echo ""
+echo "=========================================="
+echo "⏹️ 이전 컨테이너(${ACTIVE_CONTAINER}) 중지 시작..."
+echo "=========================================="
+CONTAINER_NAME="hospital-backend-${ACTIVE_CONTAINER}"
+
+# 컨테이너가 실행 중인지 확인
+if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo "📍 중지 대상: ${CONTAINER_NAME}"
+    echo "단계 1: Graceful shutdown 시도 (10초 대기)..."
+    docker stop -t 10 ${CONTAINER_NAME}
+    
+    # 3초 대기
+    sleep 3
+    
+    # 여전히 실행 중인지 확인
+    if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        echo -e "${YELLOW}⚠️ 여전히 실행 중입니다. 즉시 종료 시도...${NC}"
+        docker kill ${CONTAINER_NAME}
+        sleep 2
+    fi
+    
+    echo -e "${GREEN}✅ ${CONTAINER_NAME} 중지 완료${NC}"
+else
+    echo "ℹ️  ${CONTAINER_NAME}는 이미 중지 상태입니다."
+fi
+
+# 최종 상태 확인
+RUNNING_COUNT=$(docker ps --format '{{.Names}}' | grep -c "^hospital-backend" || echo "0")
+echo ""
+echo "=========================================="
+if [ "$RUNNING_COUNT" -eq 1 ]; then
+    echo -e "${GREEN}✅ 백엔드 컨테이너 1개만 실행 중 (정상)${NC}"
+    docker ps --format "table {{.Names}}\t{{.Status}}" | grep hospital-backend
+elif [ "$RUNNING_COUNT" -gt 1 ]; then
+    echo -e "${RED}⚠️ 경고: 백엔드 컨테이너가 ${RUNNING_COUNT}개 실행 중입니다!${NC}"
+    docker ps --format "table {{.Names}}\t{{.Status}}" | grep hospital-backend
+    echo ""
+    echo -e "${YELLOW}💡 자동 정리 시도 중...${NC}"
+    
+    # TARGET이 아닌 모든 백엔드 컨테이너 강제 중지
+    for container in $(docker ps --format '{{.Names}}' | grep "^hospital-backend"); do
+        if [ "$container" != "hospital-backend-${TARGET_CONTAINER}" ]; then
+            echo "강제 중지: $container"
+            docker kill $container 2>&1 || true
+        fi
+    done
+    
+    sleep 2
+    RUNNING_COUNT=$(docker ps --format '{{.Names}}' | grep -c "^hospital-backend" || echo "0")
+    
+    if [ "$RUNNING_COUNT" -eq 1 ]; then
+        echo -e "${GREEN}✅ 자동 정리 완료! 백엔드 컨테이너 1개만 실행 중${NC}"
+    else
+        echo -e "${RED}❌ 자동 정리 실패. 수동 확인 필요${NC}"
+    fi
+else
+    echo -e "${RED}⚠️ 실행 중인 백엔드 컨테이너가 없습니다!${NC}"
+fi
+echo "=========================================="
+echo ""
 
 # 시스템 정리
 echo "🧹 사용하지 않는 Docker 리소스 정리..."
@@ -259,12 +357,17 @@ echo -e "${GREEN}🎉 무중단 배포 완료!${NC}"
 echo "=========================================="
 echo -e "${BLUE}활성 컨테이너: ${TARGET_CONTAINER}${NC}"
 echo -e "${BLUE}대기 컨테이너: ${ACTIVE_CONTAINER} (중지됨)${NC}"
+
+# 최종 컨테이너 상태 출력
+echo ""
+echo "📊 현재 백엔드 컨테이너 상태:"
+docker ps -a --format "table {{.Names}}\t{{.Status}}" | grep hospital-backend || echo "No backend containers found"
+
 echo ""
 echo "📍 접속 정보:"
 echo "  🔗 API (Nginx): http://${PUBLIC_IP}"
 echo "  🔗 Backend (직접): http://${PUBLIC_IP}:8888"
 echo ""
 echo "💡 롤백이 필요한 경우:"
-echo "  docker-compose -f $COMPOSE_FILE start backend-${ACTIVE_CONTAINER}"
-echo "  그 후 Nginx 설정을 ${ACTIVE_CONTAINER}로 변경하세요."
+echo "  ./rollback.sh"
 echo "=========================================="
