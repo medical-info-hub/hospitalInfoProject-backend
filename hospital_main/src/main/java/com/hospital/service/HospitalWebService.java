@@ -110,8 +110,8 @@ public class HospitalWebService {
 
 		log.info("캐시 MISS - MBR 직접 조회 완료: {}개", hospitals.size());
 
-		// 3. 백그라운드에서 격자별 캐싱
-		geohashCacheService.cacheHospitalsByGridAsync(hospitals, userLat, userLng);
+		// 3. 백그라운드에서 MISS된 격자만 독립적으로 DB 조회 및 캐싱
+		geohashCacheService.cacheHospitalsByGridAsync(userLat, userLng);
 
 		long totalTime = System.currentTimeMillis() - totalStartTime;
 

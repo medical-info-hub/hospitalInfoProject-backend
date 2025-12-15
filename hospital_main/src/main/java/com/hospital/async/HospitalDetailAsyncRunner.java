@@ -42,6 +42,9 @@ public class HospitalDetailAsyncRunner {
 	private final AtomicInteger updatedCount = new AtomicInteger(0);
 	private int totalCount = 0;
 
+	// 재시도를 위한 실패 코드 추적
+	private final Set<String> failedCodes = ConcurrentHashMap.newKeySet();
+
 	private static final int BATCH_SIZE = 100;
 	private static final int CHUNK_SIZE = 100; // 병원코드 청크 단위
 
@@ -56,7 +59,7 @@ public class HospitalDetailAsyncRunner {
 	}
 
 	@Async("apiExecutor")
-	public void runBatchAsync(List<String> hospitalCodes) {
+	public CompletableFuture<Void> runBatchAsync(List<String> hospitalCodes) {
 		log.info("멀티스레드 배치 시작: {}건", hospitalCodes.size());
 
 		try {
@@ -76,9 +79,12 @@ public class HospitalDetailAsyncRunner {
 			// 삭제 처리
 			deleteObsoleteDetails(processedCodes);
 
+			return CompletableFuture.completedFuture(null);
+
 		} catch (Exception e) {
 			failedCount.addAndGet(hospitalCodes.size());
 			log.error("전체 배치 실패: {}", e.getMessage(), e);
+			return CompletableFuture.failedFuture(e);
 		}
 	}
 
@@ -118,6 +124,7 @@ public class HospitalDetailAsyncRunner {
 
 			} catch (Exception e) {
 				failedCount.incrementAndGet();
+				failedCodes.add(hospitalCode); // 실패한 코드 추적
 				log.error("API 호출 실패: {}", hospitalCode, e);
 			}
 
@@ -265,5 +272,77 @@ public class HospitalDetailAsyncRunner {
 
 	public int getUpdatedCount() {
 		return updatedCount.get();
+	}
+
+	public Set<String> getFailedCodes() {
+		return new HashSet<>(failedCodes);
+	}
+
+	/**
+	 * 실패한 병원코드만 재시도 (Exponential Backoff 적용)
+	 * @param maxRetries 최대 재시도 횟수
+	 * @return CompletableFuture로 감싼 최종 실패 코드 목록
+	 */
+	public CompletableFuture<Set<String>> retryFailedCodesAsync(int maxRetries) {
+		return CompletableFuture.supplyAsync(() -> {
+			if (failedCodes.isEmpty()) {
+				log.info("재시도할 실패 건이 없습니다.");
+				return Collections.emptySet();
+			}
+
+			List<String> toRetry = new ArrayList<>(failedCodes);
+			int retryAttempt = 1;
+
+			while (!toRetry.isEmpty() && retryAttempt <= maxRetries) {
+				int waitSeconds = (int) Math.pow(2, retryAttempt - 1); // 1초 → 2초 → 4초
+				log.info("{}차 재시도 시작: {}건 ({}초 대기 후)", retryAttempt, toRetry.size(), waitSeconds);
+
+				try {
+					// Exponential Backoff 대기
+					Thread.sleep(waitSeconds * 1000);
+
+					// 이전 실패 코드 초기화
+					failedCodes.clear();
+
+					// 재시도 실행 (CompletableFuture로 병렬 처리)
+					List<List<String>> partitions = partitionList(toRetry, CHUNK_SIZE);
+					Set<String> processedCodes = ConcurrentHashMap.newKeySet();
+
+					List<CompletableFuture<Void>> futures = partitions.stream()
+						.map(chunk -> CompletableFuture.runAsync(() -> processChunk(chunk, processedCodes), executor))
+						.toList();
+
+					CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+					log.info("{}차 재시도 완료: 성공 {}, 실패 {}",
+						retryAttempt, toRetry.size() - failedCodes.size(), failedCodes.size());
+
+					// 다시 실패한 코드만 추출
+					toRetry = new ArrayList<>(failedCodes);
+					retryAttempt++;
+
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					log.error("재시도 중 인터럽트 발생", e);
+					break;
+				}
+			}
+
+			if (!failedCodes.isEmpty()) {
+				log.warn("최종 실패: {}건 - {}", failedCodes.size(), failedCodes);
+			} else {
+				log.info("모든 재시도 완료: 최종 실패 0건");
+			}
+
+			return new HashSet<>(failedCodes);
+		}, executor);
+	}
+
+	/**
+	 * 카운터 및 실패 코드 완전 초기화
+	 */
+	public void resetAll() {
+		resetCounter();
+		failedCodes.clear();
 	}
 }
