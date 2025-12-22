@@ -47,19 +47,13 @@ public class HospitalJdbcRepository {
                 d.trmt_sun_start, d.trmt_sun_end
             FROM hospital_main h
             LEFT JOIN hospital_detail d ON h.hospital_code = d.hospital_code
-            WHERE MBRContains(
-                ST_GeomFromText(
-                    CONCAT('POLYGON((', ?, ' ', ?, ',', ?, ' ', ?, ',',
-                                        ?, ' ', ?, ',', ?, ' ', ?, ',', ?, ' ', ?, '))'),
-                    4326
-                ),
-                h.location
-            )
+            WHERE h.coordinate_x BETWEEN ? AND ?
+              AND h.coordinate_y BETWEEN ? AND ?
             """;
 
         return jdbcTemplate.query(sql,
             new HospitalWebResponseRowMapper(),
-            minLon, minLat, maxLon, minLat, maxLon, maxLat, minLon, maxLat, minLon, minLat
+            minLon, maxLon, minLat, maxLat
         );
     }
     private void loadMedicalSubjects(List<HospitalWebResponse> hospitals) {
