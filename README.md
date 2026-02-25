@@ -39,7 +39,7 @@ Hospital Information Hub는 **정부 공공데이터 API**를 활용하여 전�
 - 전국 병원 기본 정보 수집 및 관리 (79000+ 의료기관)
 - 병원 상세 정보 (운영시간, 주차정보, 진료과목, 전문의 수)
 - **청크 기반 멀티스레드 처리**: 100개 단위로 병원 코드 묶어 병렬 수집
-- 위치 기반 검색 (PostGIS 공간 인덱스)
+- 위치 기반 검색
 - 진료과목별 필터링
 
 ### 2. 약국 정보
@@ -154,7 +154,7 @@ graph TB
     end
     
     subgraph External["Data & External Service"]
-        DB[(MariaDB 10.11<br/>+ PostGIS)]
+        DB[(MariaDB 10.11<br/>)]
         GovAPI[정부 공공데이터 API]
         GeminiAPI[Google Gemini AI API]
         Monitor[Prometheus & Grafana<br/>모니터링]
@@ -199,7 +199,7 @@ graph TB
 #### 2. 데이터 조회 흐름
 ```
 사용자 → 위치 정보 → Service → MBR 계산 → JDBC Repository
-  → PostGIS 공간 검색 → 배치 로드 (N+1 방지) → DTO 변환 → JSON 응답
+  → 공간 검색 → 배치 로드 (N+1 방지) → DTO 변환 → JSON 응답
 ```
 
 #### 3. 실시간 응급실 데이터
@@ -395,7 +395,7 @@ erDiagram
         string hospital_name "병원명"
         double coordinate_x "경도"
         double coordinate_y "위도"
-        point location "PostGIS 위치"
+        point location "포인터 위치"
     }
 
     HOSPITAL_DETAIL {
@@ -442,7 +442,6 @@ erDiagram
 | 💾 JDBC 직접 쿼리 | JPA 오버헤드 제거 |
 | 📦 배치 처리 | 100건 단위 INSERT |
 | 🔗 EntityGraph | N+1 쿼리 방지 |
-| 🗺 PostGIS | POINT 타입 + MBR 공간 인덱스 |
 
 ### ⚡ 비동기 처리
 | 항목 | 설명 |
@@ -636,5 +635,4 @@ mvn jacoco:report
 - 📊 [공공데이터포털](https://www.data.go.kr/) - 의료 데이터 제공
 - 🌱 [Spring Framework](https://spring.io/) - 안정적이고 강력한 백엔드 프레임워크
 - 🐬 [MariaDB Foundation](https://mariadb.org/) - 데이터베이스 지원
-- 🗺 [PostGIS](https://postgis.net/) - 공간 데이터 처리
 
