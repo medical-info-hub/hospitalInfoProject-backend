@@ -77,7 +77,6 @@ Spring Framework 6.0.13
 ### Database
 ```
 MariaDB 10.11
-  ├─ PostGIS (공간 데이터)
   └─ HikariCP (Connection Pool)
 ```
 
