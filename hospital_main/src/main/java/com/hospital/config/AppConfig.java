@@ -42,7 +42,8 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
     JacksonConfig.class,
     CacheConfig.class,
     RestTemplateConfig.class,
-    RedisConfig.class         // Redis 설정
+    RedisConfig.class,     // Redis 설정
+    GeoIndexConfig.class 
 })
 public class AppConfig {
 
