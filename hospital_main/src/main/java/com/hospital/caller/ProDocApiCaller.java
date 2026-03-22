@@ -44,7 +44,6 @@ public class ProDocApiCaller {
                 return null;
             }
             
-            log.debug("API 응답: {}", response);
             
             // JSON 응답을 Java 객체로 역직렬화
             return objectMapper.readValue(response, ProDocApiResponse.class);

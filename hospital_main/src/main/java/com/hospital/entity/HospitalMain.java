@@ -65,8 +65,6 @@ public class HospitalMain {
 	@Column(name = "coordinate_y")
 	private Double coordinateY;
 
-	@Column(name = "location", columnDefinition = "POINT")
-	private Point location;
 
 	@OneToOne(mappedBy = "hospital",
 

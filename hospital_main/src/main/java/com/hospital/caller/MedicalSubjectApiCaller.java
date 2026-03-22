@@ -62,7 +62,6 @@ public class MedicalSubjectApiCaller {
                 throw new RuntimeException("API 응답이 비어있습니다");
             }
 
-            log.debug("API 응답: {}", responseJson);
 
             // JSON 파싱
             MedicalSubjectApiResponse apiResponseDto = objectMapper.readValue(responseJson, MedicalSubjectApiResponse.class);

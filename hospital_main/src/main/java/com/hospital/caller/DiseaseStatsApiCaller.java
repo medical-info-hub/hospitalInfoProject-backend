@@ -54,8 +54,7 @@ public class DiseaseStatsApiCaller {
 				throw new RuntimeException("Api 응답이 비어있습니다");
 			}
 
-			log.debug("api 응답 {}", responseJson);
-
+	
 			DiseaseStatsApiResponse apiResponseDto = objectMapper.readValue(responseJson,
 					DiseaseStatsApiResponse.class);
 			
