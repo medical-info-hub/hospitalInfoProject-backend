@@ -42,9 +42,9 @@ public class DatabaseConfig {
         config.setPassword(password);
         
         // 🔹 커넥션 풀 설정 (8만개 처리용)
-        config.setMaximumPoolSize(50);          // 최대 50개 연결
-        config.setMinimumIdle(20);              // 최소 20개 유지
-        config.setConnectionTimeout(30000);     // 연결 타임아웃 30초
+        config.setMaximumPoolSize(100);          // 최대 50개 연결
+        config.setMinimumIdle(50);              // 최소 20개 유지
+        config.setConnectionTimeout(60000);     // 연결 타임아웃 30초
         config.setIdleTimeout(600000);          // 유휴 타임아웃 10분
         config.setMaxLifetime(1800000);         // 최대 생존 시간 30분
         config.setLeakDetectionThreshold(60000); // 커넥션 리크 감지 60초
