@@ -20,6 +20,7 @@ import com.hospital.repository.HospitalJdbcRepository;
 import com.hospital.repository.HospitalMainApiRepository;
 import com.hospital.util.DistanceCalculator;
 
+import geoindex.api.SpatialRecordManager;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -30,6 +31,7 @@ public class HospitalWebService {
 	private final HospitalJdbcRepository hospitalJdbcRepository;
 	private final DistanceCalculator distanceCalculator;
 	private final GeohashCacheService geohashCacheService;
+	private final SpatialRecordManager spatialRecordManager;
 
 	private static final double KM_PER_DEGREE_LAT = 110.0;
 
@@ -37,11 +39,13 @@ public class HospitalWebService {
 	public HospitalWebService(
 		HospitalJdbcRepository hospitalJdbcRepository,
 		DistanceCalculator distanceCalculator,
-		GeohashCacheService geohashCacheService) {
+		GeohashCacheService geohashCacheService,
+		SpatialRecordManager spatialRecordManager) {
 
 		this.hospitalJdbcRepository = hospitalJdbcRepository;
 		this.distanceCalculator = distanceCalculator;
 		this.geohashCacheService = geohashCacheService;
+		this.spatialRecordManager = spatialRecordManager;
 	}
 
 	/**

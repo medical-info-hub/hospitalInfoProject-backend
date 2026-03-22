@@ -1,9 +1,10 @@
 package com.hospital.service;
 
 import com.hospital.config.RegionConfig;
-
+import com.hospital.entity.HospitalMain;
 import com.hospital.repository.HospitalMainApiRepository;
 
+import geoindex.api.SpatialRecordManager;
 import lombok.extern.slf4j.Slf4j;
 
 import com.hospital.async.HospitalMainAsyncRunner;
@@ -21,16 +22,20 @@ public class HospitalMainApiService {
 	private final HospitalMainApiRepository hospitalMainApiRepository;
 	private final HospitalMainAsyncRunner hospitalMainAsyncRunner;
 	private final RegionConfig regionConfig;
+	private final SpatialRecordManager spatialRecordManager;
 
 	@Autowired
 	public HospitalMainApiService(HospitalMainApiRepository hospitalMainApiRepository,
-			HospitalMainAsyncRunner hospitalMainAsyncRunner, RegionConfig regionConfig) {
+			HospitalMainAsyncRunner hospitalMainAsyncRunner, RegionConfig regionConfig,
+			SpatialRecordManager spatialRecordManager) {
 		this.hospitalMainApiRepository = hospitalMainApiRepository;
 		this.hospitalMainAsyncRunner = hospitalMainAsyncRunner;
 		this.regionConfig = regionConfig;
+		this.spatialRecordManager = spatialRecordManager;
 
 	}
-
+	
+	
 	public void updateHospitalMain() {
 		log.info("병원 데이터 수집 시작 - 대상 지역: {}", regionConfig.getCityName());
 		

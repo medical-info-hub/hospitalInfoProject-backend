@@ -19,7 +19,9 @@ import com.hospital.service.HospitalMainApiService;
 import com.hospital.service.MedicalSubjectApiService;
 import com.hospital.service.PharmacyApiService;
 import com.hospital.service.ProDocApiService;
+import com.hospital.service.SpatialCacheService;
 
+import geoindex.api.SpatialRecordManager;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -35,15 +37,18 @@ public class HospitalApiController {
 	private final MedicalSubjectApiService medicalSubjectApiService;
 	private final ProDocApiService proDocApiService;
 	private final PharmacyApiService pharmacyApiService;
+	private final SpatialCacheService spatialCacheService;
 
 	public HospitalApiController(HospitalMainApiService hospitalMainService,
 			HospitalDetailApiService hospitalDetailApiService, MedicalSubjectApiService medicalSubjectApiService,
-			ProDocApiService proDocApiService, PharmacyApiService pharmacyApiService) {
+			ProDocApiService proDocApiService, PharmacyApiService pharmacyApiService,
+			SpatialCacheService spatialCacheService) {
 		this.hospitalMainService = hospitalMainService;
 		this.hospitalDetailApiService = hospitalDetailApiService;
 		this.medicalSubjectApiService = medicalSubjectApiService;
 		this.proDocApiService = proDocApiService;
 		this.pharmacyApiService = pharmacyApiService;
+		this.spatialCacheService = spatialCacheService;
 	}
 	
 	private boolean isValidApiKey(String apiKey) {
@@ -67,6 +72,23 @@ public class HospitalApiController {
 	private String getClientIp() {
 	
 		return "unknown";
+	}
+	//지오해쉬 인덱스용 저장 로직
+	@PostMapping(value = "/geoindex/build", produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<Map<String, Object>> buildGeoIndex(
+	        @RequestHeader(value = "X-API-Key", required = false) String apiKey) {
+	    
+	    if (!isValidApiKey(apiKey)) {
+	        return unauthorizedResponse();
+	    }
+
+	    spatialCacheService.buildGeoIndex();
+	    
+	    Map<String, Object> response = new HashMap<>();
+	    response.put("success", true);
+	    response.put("message", "GeoIndex 빌드 시작됨");
+	    response.put("timestamp", LocalDateTime.now());
+	    return ResponseEntity.ok(response);
 	}
 
 	//병원 기본 정보를 DB에 저장 - JSON 응답으로 변경
