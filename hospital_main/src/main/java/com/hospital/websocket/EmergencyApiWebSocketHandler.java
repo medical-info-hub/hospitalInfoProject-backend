@@ -6,50 +6,55 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.hospital.event.EmergencyDataUpdateEvent;
 import com.hospital.service.EmergencyLiveService;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Component
 public class EmergencyApiWebSocketHandler extends TextWebSocketHandler {
 
     private final Set<WebSocketSession> sessions = Collections.synchronizedSet(new HashSet<>());
+    private final EmergencyLiveService emergencyLiveService;
 
-    private EmergencyLiveService emergencyApiService;
+    public EmergencyApiWebSocketHandler(EmergencyLiveService emergencyLiveService) {
+        this.emergencyLiveService = emergencyLiveService;
+    }
 
-    @Autowired
-    public void setEmergencyApiService(EmergencyLiveService emergencyApiService) {
-        this.emergencyApiService = emergencyApiService;
+    @EventListener
+    public void handleEmergencyDataUpdate(EmergencyDataUpdateEvent event) {
+        broadcastEmergencyRoomData(event.getJsonData());
     }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         sessions.add(session);
-        System.out.println("WebSocket 연결됨: " + session.getId() + ", 총 연결수: " + sessions.size());
+        log.info("WebSocket 연결됨: {}, 총 연결수: {}", session.getId(), sessions.size());
 
         boolean isFirstConnection = (sessions.size() == 1);
 
-        // 첫 접속자면 스케줄러 시작 (스케줄러가 즉시 데이터를 수집하고 브로드캐스트함)
         if (isFirstConnection) {
-            emergencyApiService.onWebSocketConnected();
-            System.out.println("첫 연결 - 스케줄러 시작 및 데이터 수집 대기 중: " + session.getId());
+            emergencyLiveService.onWebSocketConnected();
+            log.info("첫 연결 - 스케줄러 시작 및 데이터 수집 대기 중: {}", session.getId());
         } else {
-            // 추가 연결일 경우 캐시된 데이터가 있으면 즉시 전송
             try {
-                JsonNode initialData = emergencyApiService.getEmergencyRoomData();
+                JsonNode initialData = emergencyLiveService.getEmergencyRoomData();
                 if (initialData != null && initialData.size() > 0) {
                     session.sendMessage(new TextMessage(initialData.toString()));
-                    System.out.println("초기 데이터 전송 완료 (캐시): " + session.getId());
+                    log.info("초기 데이터 전송 완료 (캐시): {}", session.getId());
                 } else {
-                    System.out.println("추가 연결 - 스케줄러 데이터 대기 중: " + session.getId());
+                    log.info("추가 연결 - 스케줄러 데이터 대기 중: {}", session.getId());
                 }
             } catch (Exception e) {
-                System.err.println("초기 데이터 전송 실패: " + session.getId() + ", 오류: " + e.getMessage());
+                log.error("초기 데이터 전송 실패: {}", session.getId(), e);
             }
         }
     }
@@ -57,24 +62,20 @@ public class EmergencyApiWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         sessions.remove(session);
-        System.out.println("WebSocket 연결 해제: " + session.getId() + ", 총 연결수: " + sessions.size());
+        log.info("WebSocket 연결 해제: {}, 총 연결수: {}", session.getId(), sessions.size());
 
-        // 연결된 세션이 없을 때만 스케줄러 중지
         if (getConnectedSessionCount() == 0) {
-            emergencyApiService.onWebSocketDisconnected();
+            emergencyLiveService.onWebSocketDisconnected();
         }
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
-        System.err.println("WebSocket 에러: " + session.getId());
-        exception.printStackTrace();
-
+        log.error("WebSocket 에러: {}", session.getId(), exception);
         sessions.remove(session);
 
-        // 연결된 세션이 없을 때만 스케줄러 중지
         if (getConnectedSessionCount() == 0) {
-            emergencyApiService.onWebSocketDisconnected();
+            emergencyLiveService.onWebSocketDisconnected();
         }
     }
 
@@ -100,12 +101,11 @@ public class EmergencyApiWebSocketHandler extends TextWebSocketHandler {
                         successCount++;
                     }
                 } catch (IOException e) {
-                    System.err.println("메시지 전송 실패: " + session.getId());
+                    log.warn("메시지 전송 실패: {}", session.getId());
                     sessions.remove(session);
                 }
             }
-            
-            System.out.println("브로드캐스트 완료. 성공한 세션 수: " + successCount + "/" + sessions.size());
+            log.debug("브로드캐스트 완료. 성공한 세션 수: {}/{}", successCount, sessions.size());
         }
     }
 
@@ -120,12 +120,12 @@ public class EmergencyApiWebSocketHandler extends TextWebSocketHandler {
                         session.close(CloseStatus.NORMAL);
                     }
                 } catch (IOException e) {
-                    System.err.println("WebSocket 세션 종료 실패: " + session.getId());
+                    log.warn("WebSocket 세션 종료 실패: {}", session.getId());
                 }
             }
             sessions.clear();
         }
-        System.out.println("✅ 모든 WebSocket 연결 종료 완료");
+        log.info("모든 WebSocket 연결 종료 완료");
     }
 
     /**

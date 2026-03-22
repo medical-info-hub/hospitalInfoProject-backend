@@ -6,24 +6,24 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketSession;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hospital.async.EmergencyLiveAsyncRunner;
 import com.hospital.dto.EmergencyWebResponse;
+import com.hospital.event.EmergencyDataUpdateEvent;
 import com.hospital.repository.EmergencyLocationRepository;
-import com.hospital.websocket.EmergencyApiWebSocketHandler;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 public class EmergencyLiveService {
 
     private final EmergencyLiveAsyncRunner asyncRunner;
-    private final EmergencyApiWebSocketHandler webSocketHandler;
+    private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final EmergencyLocationRepository emergencyLocationRepository;
     private volatile String latestEmergencyJson = null;
@@ -32,13 +32,11 @@ public class EmergencyLiveService {
     // 이전 응급실 데이터를 hpid(병원코드)로 캐싱
     private final Map<String, EmergencyWebResponse> previousDataMap = new HashMap<>();
 
-    @Autowired
-    @Lazy
     public EmergencyLiveService(EmergencyLiveAsyncRunner asyncRunner,
-                              EmergencyApiWebSocketHandler webSocketHandler,
+                              ApplicationEventPublisher eventPublisher,
                               EmergencyLocationRepository emergencyLocationRepository) {
         this.asyncRunner = asyncRunner;
-        this.webSocketHandler = webSocketHandler;
+        this.eventPublisher = eventPublisher;
         this.objectMapper = new ObjectMapper();
         // null 값 제외 설정 (Map 내부 포함)
         this.objectMapper.setSerializationInclusion(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL);
@@ -55,7 +53,7 @@ public class EmergencyLiveService {
     public void onWebSocketConnected() {
         if (schedulerRunning.compareAndSet(false, true)) {
             asyncRunner.runAsyncForAllCities(this::updateCacheFromAsyncResults);
-            System.out.println("✅ 응급실 Async 스케줄러 시작 (첫 번째 연결)");
+            log.info("응급실 Async 스케줄러 시작 (첫 번째 연결)");
         }
     }
 
@@ -63,13 +61,11 @@ public class EmergencyLiveService {
      * WebSocket 연결 해제 시 호출 - 마지막 연결이면 스케줄러 중지 및 캐시 삭제
      */
     public void onWebSocketDisconnected() {
-        if (webSocketHandler.getConnectedSessionCount() == 0) {
-            if (schedulerRunning.compareAndSet(true, false)) {
-                asyncRunner.stopAsync();
-                latestEmergencyJson = null; // 캐시 삭제 (다음 접속 시 최신 데이터 제공)
-                previousDataMap.clear(); // 이전 데이터 캐시 초기화
-                System.out.println("✅ 응급실 Async 스케줄러 종료 및 캐시 삭제 (마지막 연결 해제)");
-            }
+        if (schedulerRunning.compareAndSet(true, false)) {
+            asyncRunner.stopAsync();
+            latestEmergencyJson = null;
+            previousDataMap.clear();
+            log.info("응급실 Async 스케줄러 종료 및 캐시 삭제 (마지막 연결 해제)");
         }
     }
 
@@ -93,12 +89,11 @@ public class EmergencyLiveService {
             // 데이터가 변경된 경우에만 브로드캐스트
             if (!newJsonData.equals(latestEmergencyJson)) {
                 latestEmergencyJson = newJsonData;
-                webSocketHandler.broadcastEmergencyRoomData(newJsonData);
-                System.out.println("✅ 응급실 데이터 업데이트 및 브로드캐스트 완료 (매핑: " + mappedList.size() + "건, 변경: " + changedCount + "건)");
+                eventPublisher.publishEvent(new EmergencyDataUpdateEvent(newJsonData));
+                log.info("응급실 데이터 업데이트 및 브로드캐스트 완료 (매핑: {}건, 변경: {}건)", mappedList.size(), changedCount);
             }
         } catch (Exception e) {
-            System.err.println("응급실 데이터 처리 중 오류 발생");
-            e.printStackTrace();
+            log.error("응급실 데이터 처리 중 오류 발생", e);
         }
     }
 
@@ -109,28 +104,6 @@ public class EmergencyLiveService {
         List<EmergencyWebResponse> emergencyData = new java.util.ArrayList<>();
         asyncRunner.collectAllCitiesData(emergencyData::addAll);
         return mapCoordinatesBatch(emergencyData);
-    }
-
-    /**
-     * 캐시 없을 때 WebSocket 초기 연결 시 즉시 fetch하여 전송
-     */
-    public void fetchAndSendInitialData(WebSocketSession session) {
-        try {
-            List<EmergencyWebResponse> freshData = fetchAndMapEmergencyData();
-            String jsonData = objectMapper.writeValueAsString(freshData);
-
-            // 캐시 업데이트
-            latestEmergencyJson = jsonData;
-
-            // 세션에 전송
-            if (session.isOpen()) {
-                session.sendMessage(new TextMessage(jsonData));
-                System.out.println("✅ 최신 데이터 fetch 및 전송 완료: " + session.getId() + " (" + freshData.size() + "건)");
-            }
-        } catch (Exception e) {
-            System.err.println("최신 데이터 fetch 및 전송 실패: " + session.getId());
-            e.printStackTrace();
-        }
     }
 
     /**
@@ -231,20 +204,14 @@ public class EmergencyLiveService {
      * WebSocket 초기 연결 시 캐시 반환
      */
     public JsonNode getEmergencyRoomData() {
-        System.out.println("🔍 getEmergencyRoomData() 호출 - latestEmergencyJson null 여부: " + (latestEmergencyJson == null));
-
         if (latestEmergencyJson == null) {
-            System.out.println("⚠️ 캐시 없음 - 빈 ObjectNode 반환");
             return objectMapper.createObjectNode();
         }
 
         try {
-            JsonNode result = objectMapper.readTree(latestEmergencyJson);
-            System.out.println("✅ 캐시 반환 - 타입: " + result.getNodeType() + ", 크기: " + result.size());
-            return result;
+            return objectMapper.readTree(latestEmergencyJson);
         } catch (Exception e) {
-            System.err.println("응급실 데이터 파싱 중 오류 발생");
-            e.printStackTrace();
+            log.error("응급실 데이터 파싱 중 오류 발생", e);
             return objectMapper.createObjectNode();
         }
     }
@@ -255,10 +222,10 @@ public class EmergencyLiveService {
     public void stopScheduler() {
         if (schedulerRunning.compareAndSet(true, false)) {
             asyncRunner.stopAsync();
-            previousDataMap.clear(); // 이전 데이터 캐시 초기화
-            System.out.println("✅ 응급실 스케줄러 강제 중지 완료");
+            previousDataMap.clear();
+            log.info("응급실 스케줄러 강제 중지 완료");
         } else {
-            System.out.println("⚠️ 스케줄러가 이미 중지되어 있습니다.");
+            log.warn("스케줄러가 이미 중지되어 있습니다.");
         }
     }
 
@@ -270,13 +237,9 @@ public class EmergencyLiveService {
         stats.put("schedulerRunning", schedulerRunning.get());
         stats.put("hasLatestData", latestEmergencyJson != null);
         stats.put("lastDataSize", getEmergencyRoomData().size());
-        stats.put("connectedSessions", webSocketHandler.getConnectedSessionCount());
-
-        // AsyncRunner에서 통계 가져오기 
         stats.put("completedCount", asyncRunner.getCompletedCount());
         stats.put("failedCount", asyncRunner.getFailedCount());
         stats.put("processedCount", asyncRunner.getProcessedCount());
-
         return stats;
     }
 
