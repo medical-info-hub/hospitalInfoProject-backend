@@ -38,7 +38,7 @@ public class HospitalJdbcRepository {
             SELECT
                 h.hospital_code, h.hospital_name, h.hospital_address, h.hospital_tel,
                 h.doctor_num, h.coordinate_x, h.coordinate_y,
-                d.weekday_lunch, d.parking_capacity, d.park_xpns_yn, d.noTrmtHoli, d.noTrmtSun,
+                d.weekday_lunch, d.parking_capacity, d.park_xpns_yn, d.no_Trmt_Holi, d.no_Trmt_Sun,
                 d.mon_open, d.mon_end, d.tues_open, d.tues_end,
                 d.wed_open, d.wed_end, d.thurs_open, d.thurs_end,
                 d.fri_open, d.fri_end, d.trmt_sat_start, d.trmt_sat_end,
@@ -67,7 +67,7 @@ public class HospitalJdbcRepository {
             SELECT
                 h.hospital_code, h.hospital_name, h.hospital_address, h.hospital_tel,
                 h.doctor_num, h.coordinate_x, h.coordinate_y,
-                d.weekday_lunch, d.parking_capacity, d.park_xpns_yn, d.noTrmtHoli, d.noTrmtSun,
+                d.weekday_lunch, d.parking_capacity, d.park_xpns_yn, d.no_Trmt_Holi, d.no_Trmt_Sun,
                 d.mon_open, d.mon_end, d.tues_open, d.tues_end,
                 d.wed_open, d.wed_end, d.thurs_open, d.thurs_end,
                 d.fri_open, d.fri_end, d.trmt_sat_start, d.trmt_sat_end,
@@ -107,7 +107,7 @@ public class HospitalJdbcRepository {
             SELECT
                 h.hospital_code, h.hospital_name, h.hospital_address, h.hospital_tel,
                 h.doctor_num, h.coordinate_x, h.coordinate_y,
-                d.weekday_lunch, d.parking_capacity, d.park_xpns_yn, d.noTrmtHoli, d.noTrmtSun,
+                d.weekday_lunch, d.parking_capacity, d.park_xpns_yn, d.no_Trmt_Holi, d.no_Trmt_Sun,
                 d.mon_open, d.mon_end, d.tues_open, d.tues_end,
                 d.wed_open, d.wed_end, d.thurs_open, d.thurs_end,
                 d.fri_open, d.fri_end, d.trmt_sat_start, d.trmt_sat_end,

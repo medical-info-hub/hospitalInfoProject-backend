@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 public class ProDocAsyncRunner {
-	private final RateLimiter rateLimiter = RateLimiter.create(10.0);
+	private final RateLimiter rateLimiter = RateLimiter.create(20.0);
 	private final Executor executor;
 	private final ProDocApiCaller apiCaller;
 	private final ProDocApiParser parser;

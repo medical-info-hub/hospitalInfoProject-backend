@@ -31,8 +31,8 @@ public class HospitalWebResponseRowMapper implements RowMapper<HospitalWebRespon
 				.weekdayLunch(rs.getString("weekday_lunch"))
 				.parkingCapacity(rs.getInt("parking_capacity"))
 				.parkingFee("Y".equalsIgnoreCase(rs.getString("park_xpns_yn")))
-				.noTrmtHoli(rs.getString("noTrmtHoli"))
-				.noTrmtSun(rs.getString("noTrmtSun"))
+				.noTrmtHoli(rs.getString("no_Trmt_Holi"))
+				.noTrmtSun(rs.getString("no_Trmt_Sun"))
 
 				// 오늘 운영시간 (임시로 월요일 사용)
 				.todayOpen(HospitalMapperUtils.formatTime(rs.getString("mon_open")))

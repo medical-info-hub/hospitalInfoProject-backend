@@ -21,8 +21,8 @@ public class HospitalDetailApiRowMapper implements RowMapper<HospitalDetailApiIt
 		item.setParkQty(rs.getString("parking_capacity"));
 		item.setParkXpnsYn(rs.getString("park_xpns_yn"));
 		item.setLunchWeek(rs.getString("weekday_lunch"));
-		item.setNoTrmtHoli(rs.getString("noTrmtHoli"));
-		item.setNoTrmtSun(rs.getString("noTrmtSun"));
+		item.setNoTrmtHoli(rs.getString("no_Trmt_Holi"));
+		item.setNoTrmtSun(rs.getString("no_Trmt_Sun"));
 		item.setTrmtMonStart(rs.getString("mon_open"));
 		item.setTrmtMonEnd(rs.getString("mon_end"));
 		item.setTrmtTueStart(rs.getString("tues_open"));

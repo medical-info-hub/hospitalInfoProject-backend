@@ -35,10 +35,10 @@ public class HospitalDetail {
     @Column(name = "weekday_lunch", length = 50)
     private String lunchWeek;
 
-    @Column(name = "noTrmtHoli")
+    @Column(name = "no_Trmt_Holi")
     private String noTrmtHoli;
 
-    @Column(name = "noTrmtSun")
+    @Column(name = "no_Trmt_Sun")
     private String noTrmtSun;
 
     // 요일별 진료 시작/종료 시간

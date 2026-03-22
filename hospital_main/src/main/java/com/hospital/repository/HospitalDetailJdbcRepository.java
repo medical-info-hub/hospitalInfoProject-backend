@@ -60,7 +60,7 @@ public class HospitalDetailJdbcRepository {
         }
 
         String sql = "INSERT INTO hospital_detail " +
-                "(hospital_code, parking_capacity, park_xpns_yn, weekday_lunch, noTrmtHoli, noTrmtSun, " +
+                "(hospital_code, parking_capacity, park_xpns_yn, weekday_lunch, no_Trmt_Holi, no_Trmt_Sun, " +
                 "mon_open, mon_end, tues_open, tues_end, wed_open, wed_end, " +
                 "thurs_open, thurs_end, fri_open, fri_end, trmt_sat_start, trmt_sat_end, " +
                 "trmt_sun_start, trmt_sun_end) " +
@@ -106,7 +106,7 @@ public class HospitalDetailJdbcRepository {
 
         String sql = "UPDATE hospital_detail SET " +
                 "parking_capacity = ?, park_xpns_yn = ?, weekday_lunch = ?, " +
-                "noTrmtHoli = ?, noTrmtSun = ?, " +
+                "no_Trmt_Holi = ?, no_Trmt_Sun = ?, " +
                 "mon_open = ?, mon_end = ?, tues_open = ?, tues_end = ?, " +
                 "wed_open = ?, wed_end = ?, thurs_open = ?, thurs_end = ?, " +
                 "fri_open = ?, fri_end = ?, trmt_sat_start = ?, trmt_sat_end = ?, " +
