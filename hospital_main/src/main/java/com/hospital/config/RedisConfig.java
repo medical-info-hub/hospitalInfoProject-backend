@@ -1,7 +1,6 @@
 package com.hospital.config;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;

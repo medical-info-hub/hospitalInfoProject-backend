@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 
 import com.hospital.async.MedicalSubjectAsyncRunner;
 import com.hospital.config.SubjectMappingConfig;
-import com.hospital.repository.HospitalMainApiRepository;
 import com.hospital.repository.MedicalSubjectApiRepository;
 
 import lombok.extern.slf4j.Slf4j;
@@ -22,18 +21,16 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class MedicalSubjectApiService {
 
-	private final HospitalMainApiRepository hospitalMainApiRepository;
 	private final MedicalSubjectAsyncRunner medicalSubjectAsyncRunner;
 	private final MedicalSubjectApiRepository medicalSubjectApiRepository;
 	private final SubjectMappingConfig subjectMappingConfig;
 
 	@Autowired
-	public MedicalSubjectApiService(HospitalMainApiRepository hospitalMainApiRepository,
+	public MedicalSubjectApiService(
 			MedicalSubjectAsyncRunner medicalSubjectAsyncRunner,
 			MedicalSubjectApiRepository medicalSubjectApiRepository,
 			SubjectMappingConfig subjectMappingConfig) {
 		this.medicalSubjectApiRepository = medicalSubjectApiRepository;
-		this.hospitalMainApiRepository = hospitalMainApiRepository;
 		this.medicalSubjectAsyncRunner = medicalSubjectAsyncRunner;
 		this.subjectMappingConfig = subjectMappingConfig;
 	}

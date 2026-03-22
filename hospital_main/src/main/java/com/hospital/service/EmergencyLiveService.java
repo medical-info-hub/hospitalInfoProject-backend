@@ -17,7 +17,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hospital.async.EmergencyLiveAsyncRunner;
 import com.hospital.dto.EmergencyWebResponse;
 import com.hospital.repository.EmergencyLocationRepository;
-import com.hospital.repository.HospitalMainApiRepository;
 import com.hospital.websocket.EmergencyApiWebSocketHandler;
 
 @Service

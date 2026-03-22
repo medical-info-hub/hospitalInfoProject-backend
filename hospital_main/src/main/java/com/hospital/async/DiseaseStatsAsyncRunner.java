@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import com.google.common.util.concurrent.RateLimiter;
 import com.hospital.caller.DiseaseStatsApiCaller;
 import com.hospital.dto.DiseaseStatsApiResponse;
 import com.hospital.entity.DiseaseStats;

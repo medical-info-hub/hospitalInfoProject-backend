@@ -1,6 +1,5 @@
 package com.hospital.entity;
 
-import java.time.LocalDateTime;
 
 import org.hibernate.annotations.DynamicUpdate;
 

@@ -21,7 +21,6 @@ import com.hospital.service.PharmacyApiService;
 import com.hospital.service.ProDocApiService;
 import com.hospital.service.SpatialCacheService;
 
-import geoindex.api.SpatialRecordManager;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j

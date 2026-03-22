@@ -8,7 +8,6 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hospital.dto.HospitalMainApiResponse;
 import com.hospital.dto.MedicalSubjectApiResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.extern.slf4j.Slf4j;

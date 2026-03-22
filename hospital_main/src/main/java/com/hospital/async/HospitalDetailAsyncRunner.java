@@ -40,7 +40,6 @@ public class HospitalDetailAsyncRunner {
 	private final AtomicInteger failedCount = new AtomicInteger(0);
 	private final AtomicInteger insertedCount = new AtomicInteger(0);
 	private final AtomicInteger updatedCount = new AtomicInteger(0);
-	private int totalCount = 0;
 
 	// 재시도를 위한 실패 코드 추적
 	private final Set<String> failedCodes = ConcurrentHashMap.newKeySet();
@@ -251,7 +250,6 @@ public class HospitalDetailAsyncRunner {
 	}
 
 	public void setTotalCount(int totalCount) {
-		this.totalCount = totalCount;
 		completedCount.set(0);
 		failedCount.set(0);
 		insertedCount.set(0);

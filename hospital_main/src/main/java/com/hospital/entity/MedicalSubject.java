@@ -1,6 +1,5 @@
 package com.hospital.entity;
 
-import java.util.List;
 
 import org.hibernate.annotations.DynamicUpdate;
 

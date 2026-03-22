@@ -1,26 +1,18 @@
 package com.hospital.service;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.hospital.config.RegionConfig;
-import com.hospital.converter.HospitalConverter;
 import com.hospital.dto.HospitalWebResponse;
-import com.hospital.entity.HospitalMain;
 import com.hospital.repository.HospitalJdbcRepository;
-import com.hospital.repository.HospitalMainApiRepository;
 import com.hospital.util.DistanceCalculator;
 
-import geoindex.api.SpatialRecordManager;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -31,7 +23,6 @@ public class HospitalWebService {
 	private final HospitalJdbcRepository hospitalJdbcRepository;
 	private final DistanceCalculator distanceCalculator;
 	private final GeohashCacheService geohashCacheService;
-	private final SpatialRecordManager spatialRecordManager;
 
 	private static final double KM_PER_DEGREE_LAT = 110.0;
 
@@ -39,13 +30,11 @@ public class HospitalWebService {
 	public HospitalWebService(
 		HospitalJdbcRepository hospitalJdbcRepository,
 		DistanceCalculator distanceCalculator,
-		GeohashCacheService geohashCacheService,
-		SpatialRecordManager spatialRecordManager) {
+		GeohashCacheService geohashCacheService) {
 
 		this.hospitalJdbcRepository = hospitalJdbcRepository;
 		this.distanceCalculator = distanceCalculator;
 		this.geohashCacheService = geohashCacheService;
-		this.spatialRecordManager = spatialRecordManager;
 	}
 
 	/**

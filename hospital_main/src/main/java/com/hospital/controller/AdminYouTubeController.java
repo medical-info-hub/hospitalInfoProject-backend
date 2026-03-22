@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hospital.initializer.YouTubeDataInitializer;
 
-import lombok.RequiredArgsConstructor;
 
 import java.util.HashMap;
 import java.util.Map;

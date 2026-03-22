@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import com.google.common.util.concurrent.RateLimiter;
 import com.hospital.caller.HospitalMainApiCaller;
 import com.hospital.config.RegionConfig;
-import com.hospital.dto.HospitalMainApiItem;
 import com.hospital.dto.HospitalMainApiResponse;
 import com.hospital.entity.HospitalMain;
 import com.hospital.parser.HospitalMainApiParser;
@@ -28,7 +27,6 @@ public class HospitalMainAsyncRunner {
     private final AtomicInteger completedCount = new AtomicInteger(0);
     private final AtomicInteger failedCount = new AtomicInteger(0);
     private final AtomicInteger insertedCount = new AtomicInteger(0);
-    private int totalCount = 0;
 
     private final HospitalMainApiCaller apiCaller;
     private final HospitalMainApiParser parser;
@@ -135,7 +133,6 @@ public class HospitalMainAsyncRunner {
     }
 
     public void setTotalCount(int totalCount) {
-        this.totalCount = totalCount;
         resetCounter();
     }
 }

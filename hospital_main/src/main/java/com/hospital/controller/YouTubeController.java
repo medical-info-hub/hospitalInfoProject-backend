@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.hospital.caller.YouTubeApiCaller;
-import com.hospital.dto.YouTubeApiItem;
 import com.hospital.entity.YouTubeVideo;
 import com.hospital.service.YouTubeVideoService;
 

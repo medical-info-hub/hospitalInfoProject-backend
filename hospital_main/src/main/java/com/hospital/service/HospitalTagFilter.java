@@ -2,11 +2,9 @@ package com.hospital.service;
 
 import com.hospital.entity.HospitalMain;
 import com.hospital.entity.HospitalDetail;
-import com.hospital.entity.ProDoc;
 import com.hospital.util.CurrentTimeUtils;
 import com.hospital.util.TodayOperatingTimeCalculator;
 
-import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
@@ -69,7 +67,6 @@ public class HospitalTagFilter {
 
     private static boolean isCurrentlyOpen(HospitalDetail detail) {
         LocalDateTime now = CurrentTimeUtils.getCurrentDateTime();
-        DayOfWeek today = now.getDayOfWeek();
         
         // TodayOperatingTimeCalculator의 로직 활용
         TodayOperatingTimeCalculator.TodayOperatingTime todayTime = 

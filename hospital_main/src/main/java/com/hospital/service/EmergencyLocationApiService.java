@@ -1,14 +1,10 @@
 package com.hospital.service;
 
-import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.hospital.async.EmergencyLocationAsyncRunner;
-import com.hospital.dto.EmergencyLocationApiResponse;
-import com.hospital.entity.EmergencyLocation;
-import com.hospital.parser.EmergencyLocationApiParser;
 import com.hospital.repository.EmergencyLocationRepository;
 
 import lombok.extern.slf4j.Slf4j;
@@ -18,15 +14,12 @@ import lombok.extern.slf4j.Slf4j;
 public class EmergencyLocationApiService {
 
 	private final EmergencyLocationAsyncRunner emergencyLocationAsyncRunner;
-	private final EmergencyLocationApiParser emergencyLocationApiParser;
 	private final EmergencyLocationRepository emergencyLocationRepository;
 
 	@Autowired
 	public EmergencyLocationApiService(EmergencyLocationAsyncRunner emergencyLocationAsyncRunner,
-			EmergencyLocationApiParser emergencyLocationApiParser,
 			EmergencyLocationRepository emergencyLocationRepository) {
 		this.emergencyLocationAsyncRunner = emergencyLocationAsyncRunner;
-		this.emergencyLocationApiParser = emergencyLocationApiParser;
 		this.emergencyLocationRepository = emergencyLocationRepository;
 	}
 

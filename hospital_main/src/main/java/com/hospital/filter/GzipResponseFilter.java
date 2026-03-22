@@ -16,7 +16,6 @@ import java.util.zip.GZIPOutputStream;
  */
 public class GzipResponseFilter implements Filter {
 
-    private static final int MIN_GZIP_SIZE = 1024; // 1KB
 
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {

@@ -30,7 +30,6 @@ public class MedicalSubjectAsyncRunner {
     private final AtomicInteger completedCount = new AtomicInteger(0);
     private final AtomicInteger failedCount = new AtomicInteger(0);
     private final AtomicInteger insertedCount = new AtomicInteger(0);
-    private int totalCount = 0;
 
     private final MedicalSubjectApiCaller apiCaller;
     private final MedicalSubjectApiParser parser;
@@ -60,8 +59,6 @@ public class MedicalSubjectAsyncRunner {
             if (subjectCode == null || subjectCode.trim().isEmpty()) {
                 throw new IllegalArgumentException("과목코드가 비어있습니다");
             }
-
-           
 
             int pageNo = 1;
             int numOfRows = 1000;
@@ -137,7 +134,6 @@ public class MedicalSubjectAsyncRunner {
     }
 
     public void setTotalCount(int totalCount) {
-        this.totalCount = totalCount;
         resetCounter();
     }
 }

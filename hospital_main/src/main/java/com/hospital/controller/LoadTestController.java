@@ -8,7 +8,6 @@ import geoindex.api.SpatialRecordManager;
 import geoindex.index.GeoHashIndex;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.MediaType;
 import java.util.List;

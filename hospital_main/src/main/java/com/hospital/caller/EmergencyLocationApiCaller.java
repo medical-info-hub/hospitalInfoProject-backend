@@ -18,7 +18,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import com.hospital.dto.EmergencyApiResponse;
 import com.hospital.dto.EmergencyLocationApiResponse;
 
 import lombok.extern.slf4j.Slf4j;

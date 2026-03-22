@@ -4,26 +4,22 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import com.hospital.converter.PharmacyConverter;
 import com.hospital.dto.PharmacyWebResponse;
 import com.hospital.entity.Pharmacy;
 import com.hospital.repository.PharmacyApiRepository;
-import com.hospital.util.DistanceCalculator;
 
 @Service
 public class PharmacyWebService {
 
 	private final PharmacyApiRepository pharmacyApiRepository;
 	private final PharmacyConverter pharmacyConverter;
-	private final DistanceCalculator distanceCalculator;
 
 	@Autowired
-	public PharmacyWebService(PharmacyApiRepository pharmacyApiRepository, PharmacyConverter pharmacyConverter,
-			DistanceCalculator distanceCalculator) {
-		this.distanceCalculator = distanceCalculator;
+	public PharmacyWebService(PharmacyApiRepository pharmacyApiRepository, PharmacyConverter pharmacyConverter
+			) {
 		this.pharmacyConverter = pharmacyConverter;
 		this.pharmacyApiRepository = pharmacyApiRepository;
 

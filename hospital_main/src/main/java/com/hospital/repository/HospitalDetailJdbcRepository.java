@@ -21,7 +21,6 @@ public class HospitalDetailJdbcRepository {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    private static final int BATCH_SIZE = 100;
     private static final HospitalDetailApiRowMapper ROW_MAPPER = new HospitalDetailApiRowMapper();
 
     /**

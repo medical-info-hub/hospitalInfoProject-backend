@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -27,7 +26,6 @@ public class ProDocAsyncRunner {
 	private final Executor executor;
 	private final ProDocApiCaller apiCaller;
 	private final ProDocApiParser parser;
-	private final ProDocApiRepository repository;
 	private final AtomicInteger completedCount = new AtomicInteger(0);
 	private final AtomicInteger failedCount = new AtomicInteger(0);
 	private final AtomicInteger insertedCount = new AtomicInteger(0);
@@ -40,7 +38,6 @@ public class ProDocAsyncRunner {
 			@Qualifier("apiExecutor") Executor executor, CommonBatchRepository commonBatchRepository) {
 		this.apiCaller = apiCaller;
 		this.parser = parser;
-		this.repository = repository;
 		this.executor = executor;
 		this.commonBatchRepository = commonBatchRepository;
 	}
@@ -110,7 +107,6 @@ public class ProDocAsyncRunner {
 		    );
 		    insertedCount.addAndGet(lastBatchSize);
 		}
-		log.debug("[{}] 청크 처리 완료: {}건 저장", threadName, batch.size());
 	}
 
 	private List<List<String>> partitionList(List<String> list, int size) {

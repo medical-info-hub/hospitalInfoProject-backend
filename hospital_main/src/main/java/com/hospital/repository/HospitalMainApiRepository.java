@@ -1,6 +1,5 @@
 package com.hospital.repository;
 
-import com.hospital.dto.HospitalWebResponse;
 import com.hospital.entity.HospitalMain;
 
 import jakarta.persistence.QueryHint;
@@ -8,7 +7,6 @@ import jakarta.transaction.Transactional;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
