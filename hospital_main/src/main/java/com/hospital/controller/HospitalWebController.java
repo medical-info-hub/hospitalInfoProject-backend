@@ -25,19 +25,20 @@ public class HospitalWebController {
 
 	private final HospitalWebService hospitalService;
 	private final PharmacyWebService pharmacyService;
+	
 
 	@Autowired
-	public HospitalWebController(HospitalWebService hospitalService, PharmacyWebService pharmacyService) {
+	public HospitalWebController(HospitalWebService hospitalService, PharmacyWebService pharmacyService
+			) {
 		this.hospitalService = hospitalService;
 		this.pharmacyService = pharmacyService;
-	}
+			}
 
 	// 병원 위치기반 데이터 (기본)
 	@GetMapping(value = "/hospitalsData", produces = MediaType.APPLICATION_JSON_VALUE)
-	public List<HospitalWebResponse> getHospitals(
-			@RequestParam double userLat,         // 사용자 위도
-			@RequestParam double userLng,         // 사용자 경도
-			@RequestParam double radius          // 검색 반경 (km)
+	public List<HospitalWebResponse> getHospitals(@RequestParam double userLat, // 사용자 위도
+			@RequestParam double userLng, // 사용자 경도
+			@RequestParam double radius // 검색 반경 (km)
 	) {
 		long startTime = System.currentTimeMillis();
 		log.info("[기본] 병원 검색 API 호출 - 위도: {}, 경도: {}, 반경: {}km", userLat, userLng, radius);
@@ -52,20 +53,18 @@ public class HospitalWebController {
 
 	// 병원 위치기반 데이터 (진료과 필터링 + limit)
 	@GetMapping(value = "/hospitalsDataFiltered", produces = MediaType.APPLICATION_JSON_VALUE)
-	public List<HospitalWebResponse> getHospitalsFiltered(
-			@RequestParam double userLat,         // 사용자 위도
-			@RequestParam double userLng,         // 사용자 경도
-			@RequestParam double radius,          // 검색 반경 (km)
-			@RequestParam(required = false) List<String> departments,  // 진료과 목록
-			@RequestParam(required = false, defaultValue = "0") Integer limit  // 결과 개수 제한
+	public List<HospitalWebResponse> getHospitalsFiltered(@RequestParam double userLat, // 사용자 위도
+			@RequestParam double userLng, // 사용자 경도
+			@RequestParam double radius, // 검색 반경 (km)
+			@RequestParam(required = false) List<String> departments, // 진료과 목록
+			@RequestParam(required = false, defaultValue = "0") Integer limit // 결과 개수 제한
 	) {
 		long startTime = System.currentTimeMillis();
-		log.info("[필터링] 병원 검색 API 호출 - 위도: {}, 경도: {}, 반경: {}km, 진료과: {}, limit: {}",
-			userLat, userLng, radius, departments, limit);
+		log.info("[필터링] 병원 검색 API 호출 - 위도: {}, 경도: {}, 반경: {}km, 진료과: {}, limit: {}", userLat, userLng, radius,
+				departments, limit);
 
-		List<HospitalWebResponse> result = hospitalService.getOptimizedHospitalsV2(
-			userLat, userLng, radius, departments, limit
-		);
+		List<HospitalWebResponse> result = hospitalService.getOptimizedHospitalsV2(userLat, userLng, radius,
+				departments, limit);
 
 		long endTime = System.currentTimeMillis();
 		log.info("[필터링] 병원 검색 완료 - 조회된 병원 수: {}개, 응답 시간: {}ms", result.size(), (endTime - startTime));
@@ -85,6 +84,5 @@ public class HospitalWebController {
 
 		return result;
 	}
-
 
 }
