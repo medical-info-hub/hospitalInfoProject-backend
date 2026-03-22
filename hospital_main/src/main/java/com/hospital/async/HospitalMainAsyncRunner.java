@@ -17,6 +17,7 @@ import com.hospital.entity.HospitalMain;
 import com.hospital.parser.HospitalMainApiParser;
 import com.hospital.repository.HospitalMainApiRepository;
 
+import geoindex.api.SpatialRecordManager;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -33,6 +34,7 @@ public class HospitalMainAsyncRunner {
     private final HospitalMainApiParser parser;
     private final HospitalMainApiRepository hospitalMainApiRepository;
     private final RegionConfig regionConfig;
+    private final SpatialRecordManager spatialRecordManager;
 
     private static final int BATCH_SIZE = 100;
 
@@ -40,11 +42,13 @@ public class HospitalMainAsyncRunner {
     public HospitalMainAsyncRunner(HospitalMainApiCaller apiCaller,
                                    HospitalMainApiParser parser,
                                    HospitalMainApiRepository hospitalMainApiRepository,
-                                   RegionConfig regionConfig) {
+                                   RegionConfig regionConfig,
+                                   SpatialRecordManager spatialRecordManager) {
         this.apiCaller = apiCaller;
         this.parser = parser;
         this.hospitalMainApiRepository = hospitalMainApiRepository;
         this.regionConfig = regionConfig;
+        this.spatialRecordManager = spatialRecordManager;
     }
 
     @Async("apiExecutor")
@@ -84,6 +88,17 @@ public class HospitalMainAsyncRunner {
                 int end = Math.min(i + BATCH_SIZE, allHospitals.size());
                 List<HospitalMain> batch = allHospitals.subList(i, end);
                 hospitalMainApiRepository.saveAll(batch);
+                
+                for (HospitalMain h : batch) {
+                    if (h.getCoordinateY() != null && h.getCoordinateX() != null) {
+                        spatialRecordManager.put(
+                            h.getCoordinateY(),
+                            h.getCoordinateX(),
+                            h.getHospitalCode().getBytes()
+                        );
+                    }
+                }
+                
                 insertedTotal += batch.size();
                 log.info("지역 {} 배치 저장: {}건 완료", sidoName, insertedTotal);
             }
