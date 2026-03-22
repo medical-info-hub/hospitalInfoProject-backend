@@ -16,7 +16,6 @@ import com.hospital.dto.ProDocApiResponse;
 import com.hospital.entity.ProDoc;
 import com.hospital.parser.ProDocApiParser;
 import com.hospital.repository.CommonBatchRepository;
-import com.hospital.repository.ProDocApiRepository;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -34,7 +33,7 @@ public class ProDocAsyncRunner {
 	private final CommonBatchRepository commonBatchRepository;
 
 	@Autowired
-	public ProDocAsyncRunner(ProDocApiCaller apiCaller, ProDocApiParser parser, ProDocApiRepository repository,
+	public ProDocAsyncRunner(ProDocApiCaller apiCaller, ProDocApiParser parser,
 			@Qualifier("apiExecutor") Executor executor, CommonBatchRepository commonBatchRepository) {
 		this.apiCaller = apiCaller;
 		this.parser = parser;
