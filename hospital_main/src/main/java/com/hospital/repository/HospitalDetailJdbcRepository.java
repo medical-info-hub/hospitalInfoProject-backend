@@ -10,7 +10,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hospital.dto.HospitalDetailApiItem;
-import com.hospital.util.HospitalMapperUtils;
+import com.hospital.util.MapperUtils;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -69,7 +69,7 @@ public class HospitalDetailJdbcRepository {
         List<Object[]> batchArgs = items.stream()
                 .map(item -> new Object[]{
                         item.getHospitalCode(),
-                        HospitalMapperUtils.parseInteger(item.getParkQty()),
+                        MapperUtils.parseInteger(item.getParkQty()),
                         item.getParkXpnsYn(),
                         item.getLunchWeek(),
                         item.getNoTrmtHoli(),
@@ -115,7 +115,7 @@ public class HospitalDetailJdbcRepository {
 
         List<Object[]> batchArgs = items.stream()
                 .map(item -> new Object[]{
-                        HospitalMapperUtils.parseInteger(item.getParkQty()),
+                        MapperUtils.parseInteger(item.getParkQty()),
                         item.getParkXpnsYn(),
                         item.getLunchWeek(),
                         item.getNoTrmtHoli(),

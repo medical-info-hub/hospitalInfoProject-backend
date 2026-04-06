@@ -5,7 +5,7 @@ import com.hospital.entity.MedicalSubject;
 import com.hospital.dto.HospitalWebResponse;
 import com.hospital.entity.HospitalDetail;
 import com.hospital.entity.ProDoc;
-import com.hospital.util.HospitalMapperUtils;
+import com.hospital.util.MapperUtils;
 import com.hospital.util.TodayOperatingTimeCalculator;
 
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +41,7 @@ public class HospitalConverter {
 				.hospitalCode(hospitalMain.getHospitalCode()).hospitalName(hospitalMain.getHospitalName())
 				.hospitalAddress(hospitalMain.getHospitalAddress()).hospitalTel(hospitalMain.getHospitalTel())
 
-				.totalDoctors(HospitalMapperUtils.parseInteger(hospitalMain.getTotalDoctors()))
+				.totalDoctors(MapperUtils.parseInteger(hospitalMain.getTotalDoctors()))
 
 				// 좌표 정보
 				.coordinateX(hospitalMain.getCoordinateX()).coordinateY(hospitalMain.getCoordinateY())
@@ -55,10 +55,10 @@ public class HospitalConverter {
 				.noTrmtSun(detail != null ? detail.getNoTrmtSun() : null)
 
 				// 운영 시간
-				.todayOpen(HospitalMapperUtils.formatTime(todayTime.getOpenTime()))
-				.todayClose(HospitalMapperUtils.formatTime(todayTime.getCloseTime()))
+				.todayOpen(MapperUtils.formatTime(todayTime.getOpenTime()))
+				.todayClose(MapperUtils.formatTime(todayTime.getCloseTime()))
 
-				.weeklySchedule(HospitalMapperUtils.createWeeklySchedule(detail))
+				.weeklySchedule(MapperUtils.createWeeklySchedule(detail))
 
 				.medicalSubjects(convertMedicalSubjectsToList(hospitalMain.getMedicalSubjects()))
 
