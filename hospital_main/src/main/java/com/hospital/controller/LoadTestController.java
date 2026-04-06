@@ -3,9 +3,11 @@ package com.hospital.controller;
 import com.hospital.dto.CacheStats;
 import com.hospital.dto.HospitalWebResponse;
 import com.hospital.service.LoadTestService;
+import com.hospital.service.HospitalSpatialCacheService;
 
 import geoindex.api.SpatialRecordManager;
 import geoindex.index.GeoHashIndex;
+import geoindex.metric.MetricsSnapshot;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -20,14 +22,16 @@ public class LoadTestController {
 	private final LoadTestService loadTestService;
 	private final GeoHashIndex geoHashIndex;
 	private final SpatialRecordManager spatialRecordManager;
+	private final HospitalSpatialCacheService spatialCacheService;
 	
 	@Autowired
 	public LoadTestController(LoadTestService loadTestService,
 			GeoHashIndex geoHashIndex,
-			SpatialRecordManager spatialRecordManager) {
+			SpatialRecordManager spatialRecordManager, HospitalSpatialCacheService spatialCacheService) {
 		this.loadTestService = loadTestService;
 		this.geoHashIndex = geoHashIndex;
 		this.spatialRecordManager = spatialRecordManager;
+		this.spatialCacheService = spatialCacheService;
 	}
 
 	@GetMapping(value = "/fullscan", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -36,6 +40,13 @@ public class LoadTestController {
 		long start = System.currentTimeMillis();
 		List<HospitalWebResponse> result = loadTestService.fullScan(lat, lng, radius);
 		return Map.of("count", result.size(), "elapsedMs", System.currentTimeMillis() - start);
+	}
+	
+	@GetMapping(value = "/fullscanData", produces = MediaType.APPLICATION_JSON_VALUE)
+	public List<HospitalWebResponse> fullScanData(@RequestParam double lat, @RequestParam double lng,
+			@RequestParam(defaultValue = "5.0") double radius) {
+		List<HospitalWebResponse> result = loadTestService.fullScan(lat, lng, radius);
+		return result;
 	}
 
 	@GetMapping(value = "/geoindex", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -51,6 +62,19 @@ public class LoadTestController {
 			@RequestParam(defaultValue = "5.0") double radius) {
 		return loadTestService.compare(lat, lng, radius);
 	}
+	
+	@GetMapping("/search")
+	public void search(@RequestParam double lat, @RequestParam double lng,
+			@RequestParam(defaultValue = "5.0") double radius ) {
+		loadTestService.search(lat, lng, radius);
+	}
+	
+	@GetMapping("/searchV1")
+	public void searchV1(@RequestParam double lat, @RequestParam double lng,
+			@RequestParam(defaultValue = "5.0") double radius) {
+		loadTestService.searchV1(lat, lng, radius);
+	}
+	
 
 	// 캐시 통계 (JMeter 부하 중 모니터링)
 	@GetMapping("/cache/stats")
@@ -98,5 +122,9 @@ public class LoadTestController {
 	        "codesInPage", codesInPage.size(),  // ← 이게 0이면 파일에 없는 것
 	        "codes", codesInPage
 	    );
+	}
+	@GetMapping("/metric")
+	public MetricsSnapshot getMetric() {
+		return spatialCacheService.getMetric();
 	}
 }
