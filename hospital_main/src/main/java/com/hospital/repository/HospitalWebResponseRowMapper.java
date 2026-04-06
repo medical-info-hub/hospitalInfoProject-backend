@@ -2,12 +2,14 @@ package com.hospital.repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.*;
 
 import org.springframework.jdbc.core.RowMapper;
 
 import com.hospital.dto.HospitalWebResponse;
-import com.hospital.util.HospitalMapperUtils;
+import com.hospital.util.MapperUtils;
 
 /**
  * 웹 API 응답용 RowMapper
@@ -18,12 +20,13 @@ public class HospitalWebResponseRowMapper implements RowMapper<HospitalWebRespon
 
 	@Override
 	public HospitalWebResponse mapRow(ResultSet rs, int rowNum) throws SQLException {
+		DayOfWeek today = LocalDate.now().getDayOfWeek();
 		return HospitalWebResponse.builder()
 				.hospitalCode(rs.getString("hospital_code"))
 				.hospitalName(rs.getString("hospital_name"))
 				.hospitalAddress(rs.getString("hospital_address"))
 				.hospitalTel(rs.getString("hospital_tel"))
-				.totalDoctors(HospitalMapperUtils.parseInteger(rs.getString("doctor_num")))
+				.totalDoctors(MapperUtils.parseInteger(rs.getString("doctor_num")))
 				.coordinateX(rs.getDouble("coordinate_x"))
 				.coordinateY(rs.getDouble("coordinate_y"))
 
@@ -34,12 +37,12 @@ public class HospitalWebResponseRowMapper implements RowMapper<HospitalWebRespon
 				.noTrmtHoli(rs.getString("no_Trmt_Holi"))
 				.noTrmtSun(rs.getString("no_Trmt_Sun"))
 
-				// 오늘 운영시간 (임시로 월요일 사용)
-				.todayOpen(HospitalMapperUtils.formatTime(rs.getString("mon_open")))
-				.todayClose(HospitalMapperUtils.formatTime(rs.getString("mon_end")))
+				// 오늘 운영시간
+				.todayOpen(MapperUtils.formatTime(MapperUtils.createHospitalTodayOpen(rs, today)))
+				.todayClose(MapperUtils.formatTime(MapperUtils.createHospitalTodayClose(rs, today)))
 
 				// 주간 스케줄
-				.weeklySchedule(HospitalMapperUtils.createWeeklySchedule(
+				.weeklySchedule(MapperUtils.createHospitalWeeklySchedule(
 					rs.getString("mon_open"), rs.getString("mon_end"),
 					rs.getString("tues_open"), rs.getString("tues_end"),
 					rs.getString("wed_open"), rs.getString("wed_end"),
