@@ -2,17 +2,28 @@ package com.hospital.service;
 
 import geoindex.api.PageResult;
 import geoindex.api.SpatialCacheEngine;
+import geoindex.metric.MetricsSnapshot;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+
 import com.hospital.dto.HospitalWebResponse;
 import com.hospital.entity.HospitalMain;
 import com.hospital.repository.HospitalJdbcRepository;
 import com.hospital.repository.HospitalMainApiRepository;
+import com.hospital.util.DistanceCalculator;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import java.util.concurrent.atomic.AtomicLong;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,27 +31,47 @@ import java.util.Objects;
 
 @Slf4j
 @Service
-public class SpatialCacheService {
+public class HospitalSpatialCacheService {
 
     private final SpatialCacheEngine<HospitalWebResponse> spatialCacheEngine;
     private final HospitalJdbcRepository hospitalJdbcRepository;
     private final HospitalMainApiRepository hospitalMainApiRepository;
 
-    private static final double KM_PER_DEGREE_LAT = 110.0;
     private final AtomicLong totalHitCount  = new AtomicLong(0);
     private final AtomicLong totalMissCount = new AtomicLong(0);
+    private final Executor hospitalTaskExecutor;
+    private final DistanceCalculator distanceCalculator;
+
+    
+    @Value("${cache.warmup.size:3000}") 
+    private int cacheSize;
 
     @Autowired
-    public SpatialCacheService(
-            SpatialCacheEngine<HospitalWebResponse> spatialCacheEngine,
+    public HospitalSpatialCacheService(
+            @Qualifier("hospitalSpatialCacheEngine") SpatialCacheEngine<HospitalWebResponse> spatialCacheEngine,
             HospitalJdbcRepository hospitalJdbcRepository,
-            HospitalMainApiRepository hospitalMainApiRepository) {
+            HospitalMainApiRepository hospitalMainApiRepository, Executor hospitalTaskExecutor, DistanceCalculator distanceCalculator) {
         this.spatialCacheEngine = spatialCacheEngine;
         this.hospitalJdbcRepository = hospitalJdbcRepository;
         this.hospitalMainApiRepository = hospitalMainApiRepository;
+        this.hospitalTaskExecutor = hospitalTaskExecutor;
+        this.distanceCalculator = distanceCalculator;
     }
 
     public List<HospitalWebResponse> search(double userLat, double userLng, double radiusKm) {
+        List<HospitalWebResponse> results = spatialCacheEngine.search(userLat, userLng, radiusKm, codes -> {
+        	List<HospitalWebResponse> dbResults = hospitalJdbcRepository.findByHospitalCodes(codes);
+        	return dbResults.stream()
+        			.collect(Collectors.toMap(HospitalWebResponse::getHospitalCode, h -> h));
+        });
+        
+        double[] mbr = distanceCalculator.calcMBR(userLat, userLng, radiusKm);
+        return results.stream()
+        		.filter(h -> h.getCoordinateX() >= mbr[0] && h.getCoordinateX() <= mbr[1]
+        				&& h.getCoordinateY() >= mbr[2] && h.getCoordinateY() <= mbr[3])
+        		.collect(Collectors.toList());
+    }
+    public List<HospitalWebResponse> searchV1(double userLat, double userLng, double radiusKm) {
         String reqId = Thread.currentThread().getName();
 
         // 1. search → HIT/MISS 판단
@@ -61,10 +92,10 @@ public class SpatialCacheService {
         // 3. DB 결과 Map으로 변환 + putCache
         Map<String, HospitalWebResponse> dbMap = new HashMap<>();
         if (!allMissCodes.isEmpty()) {
-            log.info("[{}] MISS codes 총 건수: {}", reqId, allMissCodes.size());
+    
             List<HospitalWebResponse> dbResults =
                     hospitalJdbcRepository.findByHospitalCodes(allMissCodes);
-            log.info("[{}] DB 조회 결과: {}", reqId, dbResults.size());
+        
 
             dbResults.forEach(h -> dbMap.put(h.getHospitalCode(), h));
 
@@ -92,7 +123,7 @@ public class SpatialCacheService {
         }
 
         // 4. HIT → getCached() / MISS → dbMap에서 직접 (재조회 없음)
-        double[] mbr = calcMBR(userLat, userLng, radiusKm);
+        double[] mbr = distanceCalculator.calcMBR(userLat, userLng, radiusKm);
         List<HospitalWebResponse> allResults = new ArrayList<>();
 
         for (PageResult<HospitalWebResponse> result : pageResults) {
@@ -125,16 +156,6 @@ public class SpatialCacheService {
         return allResults;
     }
     
-    
-    private double[] calcMBR(double lat, double lng, double radiusKm) {
-        double deltaDegreeY = radiusKm / KM_PER_DEGREE_LAT;
-        double kmPerDegreeLon = 111.32 * Math.cos(Math.toRadians(lat));
-        double deltaDegreeX = radiusKm / kmPerDegreeLon;
-        return new double[]{
-            lng - deltaDegreeX, lng + deltaDegreeX,
-            lat - deltaDegreeY, lat + deltaDegreeY
-        };
-    }
 
     public void buildGeoIndex() {
         log.info("GeoIndex 리빌드 시작");
@@ -151,7 +172,48 @@ public class SpatialCacheService {
             }
             log.info("GeoIndex 리빌드 완료: {}건", all.size());
         });
+        warmupCache();
     }
+    
+    @PostConstruct
+    public void warmupCache() {
+        CompletableFuture.runAsync(() -> {
+            log.info("워밍업 시작");
+            Map<Integer, List<String>> targets = spatialCacheEngine.getWarmupTargets(cacheSize);
+            List<String> allCodes = targets.values().stream()
+                    .flatMap(Collection::stream)
+                    .collect(Collectors.toList());
+            log.info("워밍업 codes: {}건", allCodes.size());
+            int chunkSize = 1000;
+            List<HospitalWebResponse> allData = new ArrayList<>();
+            for (int i = 0; i < allCodes.size(); i += chunkSize) {
+                List<String> chunk = allCodes.subList(i, Math.min(i + chunkSize, allCodes.size()));
+                allData.addAll(hospitalJdbcRepository.findByHospitalCodes(chunk));
+            }
+
+            Map<String, HospitalWebResponse> dataByCode = allData.stream()
+                    .collect(Collectors.toMap(HospitalWebResponse::getHospitalCode, h -> h));
+            targets.forEach((pageId, codes) -> {
+                List<HospitalWebResponse> data = codes.stream()
+                        .map(dataByCode::get)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                spatialCacheEngine.putCache(pageId, data);
+            });
+            log.info("워밍업 완료 - cacheSize: {}", spatialCacheEngine.getCacheSize());
+        }, hospitalTaskExecutor);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        spatialCacheEngine.persistWarmup();
+    }
+    
+    public MetricsSnapshot getMetric() {
+    	return spatialCacheEngine.getMetrics();
+    }
+
+
 
     public long getTotalHitCount()  { return totalHitCount.get(); }
     public long getTotalMissCount() { return totalMissCount.get(); }

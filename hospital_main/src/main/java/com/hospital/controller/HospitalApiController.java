@@ -19,7 +19,7 @@ import com.hospital.service.HospitalMainApiService;
 import com.hospital.service.MedicalSubjectApiService;
 import com.hospital.service.PharmacyApiService;
 import com.hospital.service.ProDocApiService;
-import com.hospital.service.SpatialCacheService;
+import com.hospital.service.HospitalSpatialCacheService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -36,12 +36,12 @@ public class HospitalApiController {
 	private final MedicalSubjectApiService medicalSubjectApiService;
 	private final ProDocApiService proDocApiService;
 	private final PharmacyApiService pharmacyApiService;
-	private final SpatialCacheService spatialCacheService;
+	private final HospitalSpatialCacheService spatialCacheService;
 
 	public HospitalApiController(HospitalMainApiService hospitalMainService,
 			HospitalDetailApiService hospitalDetailApiService, MedicalSubjectApiService medicalSubjectApiService,
 			ProDocApiService proDocApiService, PharmacyApiService pharmacyApiService,
-			SpatialCacheService spatialCacheService) {
+			HospitalSpatialCacheService spatialCacheService) {
 		this.hospitalMainService = hospitalMainService;
 		this.hospitalDetailApiService = hospitalDetailApiService;
 		this.medicalSubjectApiService = medicalSubjectApiService;
