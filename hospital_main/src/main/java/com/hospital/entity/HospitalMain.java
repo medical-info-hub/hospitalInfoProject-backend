@@ -3,7 +3,6 @@ package com.hospital.entity;
 import java.util.Set;
 
 import org.hibernate.annotations.DynamicUpdate;
-import org.locationtech.jts.geom.Point;
 
 // JPA 관련 임포트 추가
 import jakarta.persistence.Column;
