@@ -127,7 +127,7 @@ WHERE MBRContains(
 const filtered = hospitals.filter(h =>
   calculateDistance(userLat, userLng, h.lat, h.lng) <= 3
 );
-
+```
 ---
 
 ## 📊 EXPLAIN으로 검증하기
